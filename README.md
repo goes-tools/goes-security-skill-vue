@@ -131,10 +131,7 @@ The skill automatically detects your package manager:
 
 - **Vue.js 3** project with Vitest (or Jest)
 - **Node.js 18+**
-- **Java** (for Allure CLI):
-  - macOS: `brew install openjdk`
-  - Linux: `sudo apt install default-jdk`
-  - Windows: download from [adoptium.net](https://adoptium.net/)
+- **No Java required** — uses the pure JavaScript `allure` package (v3+)
 
 ---
 

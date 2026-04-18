@@ -46,7 +46,7 @@ Check devDependencies. Only install what is missing:
 
 ```bash
 # Replace PKG_CMD with the detected package manager command
-PKG_CMD add -D allure-vitest allure-js-commons allure-commandline
+PKG_CMD add -D allure-vitest allure-js-commons allure
 ```
 
 If the project uses Jest instead of Vitest, install `allure-jest` instead of `allure-vitest`.
