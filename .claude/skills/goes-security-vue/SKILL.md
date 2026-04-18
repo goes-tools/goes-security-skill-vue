@@ -143,11 +143,31 @@ it('descriptive test name', async () => {
 - Description: must include `## Vulnerabilidad que previene` and `## Defensa implementada`
 - Attachments: attacker payload (input) + defense response (output)
 
-### STEP 6: Verify
+### STEP 6: Run tests and generate Allure Report
 
-1. Run tests — all tests must pass
-2. Fix any import or config errors
-3. Show summary: total tests, checklist items covered, OWASP items covered
+After generating all test files, you MUST run the tests and generate the report automatically. Do NOT leave this as a manual step for the user.
+
+1. Run the security tests:
+   ```bash
+   npx vitest run --reporter=default --reporter=allure-vitest
+   ```
+   If the project has a `test:security` script, use that instead.
+
+2. If any tests fail due to import or config errors, fix them and re-run.
+
+3. Generate the Allure report:
+   ```bash
+   npx allure generate allure-results --clean -o allure-report
+   ```
+
+4. Open the Allure report in the browser:
+   ```bash
+   npx allure open allure-report
+   ```
+
+5. Show summary to the user: total tests, pass/fail count, checklist items covered, OWASP items covered.
+
+**Important:** Steps 1-4 are mandatory and automatic. The user should see the Allure report open in their browser without running any commands manually.
 
 ## Important Rules
 
