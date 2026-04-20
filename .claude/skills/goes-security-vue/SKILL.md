@@ -3,17 +3,21 @@ name: generate-security-tests-vue
 description: >
   This skill should be used when the user asks to "generate security tests for Vue",
   "create frontend security specs", "generate GOES tests for Vue",
-  "add allure tests to Vue", "create XSS tests", "security tests for frontend",
+  "create XSS tests", "security tests for frontend",
   "tests de seguridad para Vue", "crear tests de seguridad frontend",
+  "security report for Vue", "reporte de seguridad frontend",
   or any variation requesting automated security test generation for a Vue.js project.
+  Uses a custom HTML reporter (no Java, no Allure) that generates a self-contained
+  HTML report with sidebar navigation, charts, and evidence JSON highlighting.
 metadata:
-  version: "1.0.0"
-  coverage: "Checklist GOES (items frontend) + OWASP Top 10 + Allure Report"
+  version: "2.0.0"
+  coverage: "Checklist GOES (items frontend) + OWASP Top 10 + Custom HTML Report"
 ---
 
 # GOES Security Test Generator — Vue.js Frontend
 
-Generate professional security tests with Allure Report for Vue.js + Vitest projects.
+Generate professional security tests with a **Custom HTML Reporter** for Vue.js + Vitest projects.
+No Java, no Allure — pure Node.js reporter that generates a self-contained HTML file.
 Covers the GOES Cybersecurity Checklist (frontend items), OWASP Top 10, and common frontend vulnerabilities.
 
 ## Execution Flow
@@ -46,40 +50,97 @@ Check devDependencies. Only install what is missing:
 
 ```bash
 # Replace PKG_CMD with the detected package manager command
-PKG_CMD add -D allure-vitest allure-js-commons allure
+PKG_CMD add -D vitest @vue/test-utils
 ```
 
-If the project uses Jest instead of Vitest, install `allure-jest` instead of `allure-vitest`.
+**DO NOT install Allure, allure-vitest, allure-js-commons, or allure-commandline.** This system uses a custom pure Node.js reporter that generates HTML directly — no Java required.
 
-### STEP 3: Configure Vitest + Allure
+### STEP 3: Set up the custom reporter
 
-Modify `vitest.config.ts` (or `vite.config.ts` test section):
+The reporter system lives in `test/security/reporter/` and consists of two files:
+
+```
+test/security/
+├── reporter/
+│   ├── html-reporter.js    ← Vitest custom reporter (JavaScript, ~1600 lines)
+│   └── metadata.ts         ← Metadata collector per test
+├── *.security.spec.ts      ← Security test spec files
+└── vitest.security.config.ts ← Vitest config for security tests
+```
+
+#### reporter/metadata.ts
+
+Exports `report()` function and `AllureCompat` class. Each test uses these to register metadata (epic, feature, story, severity, tags, steps, evidence). Metadata is written to temp JSON files that the reporter reads when tests finish.
+
+```typescript
+import { report } from './reporter/metadata';
+
+it('test name', async () => {
+  const t = report();
+  t.epic('Security');
+  t.feature('XSS Prevention');
+  t.story('Block script injection via v-html');
+  t.severity('blocker');
+  t.tag('Pentest', 'OWASP A03');
+  t.parameter('payload', '<script>alert("xss")</script>');
+  t.step('Prepare malicious payload');
+  // ... test logic ...
+  t.evidence('Result', { blocked: true });
+  await t.flush();
+});
+```
+
+#### reporter/html-reporter.js
+
+Custom Vitest reporter (plain JavaScript — Vitest loads reporters with `require()`, not through ts transforms). Implements `onFinished(files, errors)`:
+1. Reads `meta-*.json` files from temp directory
+2. Matches metadata with test results by `testPath::testName` key
+3. Generates self-contained HTML with CSS, JS, and embedded data
+4. Features: sidebar Epic>Feature>Story navigation, detail modal with severity badges, SVG charts, dark theme, search, PDF export
+5. Cleans up temp files
+
+#### vitest.security.config.ts
 
 ```typescript
 import { defineConfig } from 'vitest/config';
-import AllureReporter from 'allure-vitest/reporter';
+import vue from '@vitejs/plugin-vue';
+import path from 'path';
 
 export default defineConfig({
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '../..', 'src'),
+    },
+  },
   test: {
+    globals: true,
+    environment: 'jsdom',
+    include: ['test/security/**/*.security.spec.ts'],
     reporters: [
       'default',
-      new AllureReporter({ resultsDir: 'allure-results' }),
+      ['./test/security/reporter/html-reporter.js', {
+        outputPath: './reports/security/security-report.html',
+      }],
     ],
-    setupFiles: ['./test/allure-setup.ts'],
   },
 });
 ```
 
-Create support files:
-- `test/allure-setup.ts` — copies categories to allure-results
-- `allure-categories.json` — custom failure categories (XSS, Auth, Config, Product)
-- Add `/allure-results`, `/allure-report` to `.gitignore`
-
 Add scripts to `package.json`:
-- `"test:security"`: run only security tests
-- `"test:allure"`: run tests + generate + open Allure report
-- `"allure:generate"`: generate report from results
-- `"allure:open"`: open report in browser
+
+```json
+{
+  "test:security": "vitest run --config test/security/vitest.security.config.ts",
+  "test:security:watch": "vitest --config test/security/vitest.security.config.ts"
+}
+```
+
+Add to `.gitignore`:
+
+```
+/reports
+```
 
 ### STEP 4: Read the actual code
 
@@ -94,7 +155,7 @@ Before writing ANY test, read the actual source files. Understand:
 
 ### STEP 5: Generate tests
 
-For each component/composable/router/store, create a `.spec.ts` file following the test structure below.
+For each component/composable/router/store, create a `.security.spec.ts` file following the test structure below.
 Map every applicable item from the GOES Checklist (see `references/goes-checklist-vue.md`).
 
 Read `references/goes-checklist-vue.md` for the frontend checklist with IDs, epics, features and severities.
@@ -104,78 +165,75 @@ Read `references/test-patterns-vue.md` for the exact code patterns to use.
 
 ```typescript
 import { describe, it, expect, vi } from 'vitest';
-import * as allure from 'allure-js-commons';
-
-// Helper — define ONCE per file
-async function attach(name: string, data: unknown) {
-  await allure.attachment(name, JSON.stringify(data, null, 2), {
-    contentType: 'application/json',
-  });
-}
+import { report } from './reporter/metadata';
 
 it('descriptive test name', async () => {
+  const t = report();
+
   // 1. METADATA (all required)
-  await allure.epic('...');        // Area: Seguridad | Autenticacion | Configuracion | Dominio
-  await allure.feature('...');     // Specific feature
-  await allure.story('...');       // Concrete scenario
-  await allure.severity('...');    // blocker | critical | normal | minor
-  await allure.tag('...');         // Category: XSS, Auth, Config, Pentest
-  await allure.tag('...');         // Traceability: OWASP A03, GOES Checklist R5
-  await allure.description('...'); // Markdown: ## Objetivo / ## Vulnerabilidad / ## Defensa
+  t.epic('Security');           // Area: Security | Authentication | Configuration | Domain
+  t.feature('XSS Prevention');  // Specific feature
+  t.story('Block injection');   // Concrete scenario
+  t.severity('blocker');        // blocker | critical | normal | minor
+  t.tag('Pentest', 'OWASP A03', 'GOES Checklist R5');
 
   // 2. PARAMETERS (visible inputs)
-  await allure.parameter('key', 'value');
+  t.parameter('payload', '<script>alert(1)</script>');
 
-  // 3. STEPS (Preparar → Ejecutar → Verificar)
-  await allure.step('Preparar: ...', async () => { /* setup */ });
-  await attach('Input (input)', data);
-  const result = await allure.step('Ejecutar: ...', async () => { return /* action */ });
-  await allure.step('Verificar: ...', async () => { expect(result).toBe(...); });
-  await attach('Resultado (output)', result);
+  // 3. STEPS (Prepare → Execute → Verify)
+  t.step('Prepare: create malicious payload');
+  t.evidence('Input (payload)', { payload: '<script>alert(1)</script>' });
+
+  t.step('Execute: render component with payload');
+  const wrapper = mount(MyComponent, { props: { content: payload } });
+
+  t.step('Verify: script tag is sanitized');
+  expect(wrapper.html()).not.toContain('<script>');
+  t.evidence('Result (output)', { sanitized: true, html: wrapper.html() });
+
+  await t.flush();
 });
 ```
 
 #### Rules for PENTEST tests
 
 - Prefix: `'PENTEST: ...'` in the it() name
-- Epic: `'Seguridad'`
+- Epic: `'Security'`
 - Tags: `'Pentest'` + `'OWASP Axx'` + `'GOES Checklist Rxx'`
-- Description: must include `## Vulnerabilidad que previene` and `## Defensa implementada`
-- Attachments: attacker payload (input) + defense response (output)
+- Evidence: attacker payload (input) + defense response (output)
 
-### STEP 6: Run tests and generate Allure Report
+#### Critical rule: flush()
 
-After generating all test files, you MUST run the tests and generate the report automatically. Do NOT leave this as a manual step for the user.
+Every test MUST call `await t.flush()` at the end. Without flush, metadata is not written and the report will not have the test's details.
+
+### STEP 6: Run tests and generate report
+
+After generating all test files, run the tests automatically:
 
 1. Run the security tests:
    ```bash
-   npx vitest run --reporter=default --reporter=allure-vitest
+   npm run test:security
    ```
-   If the project has a `test:security` script, use that instead.
 
 2. If any tests fail due to import or config errors, fix them and re-run.
 
-3. Generate the Allure report:
-   ```bash
-   npx allure generate allure-results --clean -o allure-report
-   ```
+3. The HTML report is automatically generated at `reports/security/security-report.html` — no extra commands needed.
 
-4. Open the Allure report in the browser:
-   ```bash
-   npx allure open allure-report
-   ```
+4. Show summary to the user: total tests, pass/fail count, checklist items covered, OWASP items covered.
 
-5. Show summary to the user: total tests, pass/fail count, checklist items covered, OWASP items covered.
-
-**Important:** Steps 1-4 are mandatory and automatic. The user should see the Allure report open in their browser without running any commands manually.
+**Important:** The report is generated automatically by the custom reporter. No `allure generate` or `allure open` commands are needed. The user just opens the HTML file in their browser.
 
 ## Important Rules
 
 - NEVER generate empty or placeholder tests — every test must have real assertions against real code
 - Read the actual source code BEFORE writing tests
 - If a `.spec.ts` or `.test.ts` file already exists, READ IT FIRST. Compare existing tests against the GOES checklist and ONLY add tests that are missing. Never duplicate existing tests.
-- Comments in code: NO accents (ASCII only). Allure strings (descriptions, steps): YES accents
+- Comments in code: NO accents (ASCII only). Metadata strings (steps, stories): YES accents
 - Detect the package manager (pnpm/yarn/npm) and use the correct command
 - Each test must be independent — no shared state, no execution order dependency
 - Mock API calls with vi.mock() or msw — never make real HTTP requests in tests
 - Use @vue/test-utils mount/shallowMount for component testing
+- Every test MUST end with `await t.flush()` — without this the metadata doesn't reach the report
+- The reporter html-reporter.js MUST be plain JavaScript — Vitest loads reporters with require()
+- Spec files must end in `.security.spec.ts` — this is the pattern the vitest config matches
+- DO NOT install Allure, allure-commandline, or Java — this system is pure Node.js

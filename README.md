@@ -1,6 +1,8 @@
 # goes-security-skill-vue
 
-Claude skill for generating automated security tests with **Allure Report** for **Vue.js + Vitest** projects.
+Claude skill for generating automated security tests with a **Custom HTML Reporter** for **Vue.js + Vitest** projects.
+
+No Java, no Allure — pure Node.js reporter that generates a self-contained HTML file with sidebar navigation, charts, and evidence highlighting.
 
 Covers the **GOES Cybersecurity Checklist** (frontend items), **OWASP Top 10**, and common frontend security vulnerabilities.
 
@@ -45,10 +47,10 @@ Open **Claude Code** or **Claude Cowork** in your project folder.
 ```
 Generate security tests for the auth store and router guards.
 Use the goes-security-vue skill, cover all applicable GOES checklist items,
-and generate pentest tests with Allure Report and OWASP traceability.
+and generate pentest tests with OWASP traceability.
 ```
 
-Claude reads the skill, analyzes your actual code, installs dependencies, and generates the tests automatically.
+Claude reads the skill, analyzes your actual code, sets up the custom reporter, and generates the tests automatically.
 
 ---
 
@@ -57,14 +59,15 @@ Claude reads the skill, analyzes your actual code, installs dependencies, and ge
 When you activate the skill, Claude:
 
 1. Analyzes your components, stores, router, and composables
-2. Installs dependencies if missing (`allure-vitest`, `allure-js-commons`, `allure-commandline`)
-3. Configures Vitest to generate Allure reports
-4. Generates `.spec.ts` files with:
-   - Allure metadata (epic, feature, story, severity, tags)
+2. Installs test dependencies if missing (vitest, @vue/test-utils)
+3. Creates the custom reporter system in `test/security/reporter/`
+4. Configures Vitest with a dedicated security test config
+5. Generates `.security.spec.ts` files with:
+   - Metadata (epic, feature, story, severity, tags) via `report()`
    - Triple traceability: `GOES Checklist Rxx` + `OWASP Axx`
    - Visible steps (Prepare / Execute / Verify)
-   - JSON attachments (attacker payload + defense response)
-   - Markdown descriptions (vulnerability + defense)
+   - JSON evidence (attacker payload + defense response)
+6. Runs the tests and generates the HTML report automatically
 
 ---
 
@@ -78,12 +81,12 @@ When you activate the skill, Claude:
 > Generate all frontend security tests
 ```
 
-### View the interactive report
+### View the report
 
 ```bash
-npm test
-npx allure generate allure-results --clean -o allure-report
-npx allure open allure-report
+npm run test:security
+# Report generated at: reports/security/security-report.html
+# Open it in your browser — no extra commands needed
 ```
 
 ---
@@ -129,9 +132,9 @@ The skill automatically detects your package manager:
 
 ## Requirements
 
-- **Vue.js 3** project with Vitest (or Jest)
+- **Vue.js 3** project with Vitest
 - **Node.js 18+**
-- **No Java required** — uses the pure JavaScript `allure` package (v3+)
+- **No Java required** — uses a custom pure Node.js HTML reporter
 
 ---
 
