@@ -57,58 +57,22 @@ PKG_CMD add -D vitest @vue/test-utils
 
 ### STEP 3: Set up the custom reporter
 
-This skill includes the reporter files bundled in the `reporter/` directory. Copy them into the project:
+This skill bundles the reporter files in `.claude/skills/goes-security-vue/reporter/`. **Do NOT copy them** — reference them directly to avoid duplicates.
 
-```bash
-# Copy the bundled reporter files from the skill into the project
-mkdir -p test/security/reporter
-cp .claude/skills/goes-security-vue/reporter/html-reporter.js test/security/reporter/html-reporter.js
-cp .claude/skills/goes-security-vue/reporter/metadata.ts test/security/reporter/metadata.ts
-```
+The reporter consists of two files:
 
-The final structure in the project will be:
-
-```
-test/security/
-├── reporter/
-│   ├── html-reporter.js    ← Vitest custom reporter (JavaScript, ~1600 lines)
-│   └── metadata.ts         ← Metadata collector per test
-├── *.security.spec.ts      ← Security test spec files
-└── vitest.security.config.ts ← Vitest config for security tests
-```
+- **`reporter/html-reporter.js`** — Custom Vitest reporter (plain JavaScript, ~1600 lines). Dual-compatible: supports both Vitest (`onFinished`) and Jest (`onRunComplete`). Reads metadata JSON files, matches with test results, generates self-contained HTML with sidebar navigation, severity badges, SVG charts, dark theme, search, and PDF export.
+- **`reporter/metadata.ts`** — Metadata collector. Exports `report()` function and `AllureCompat` class. Each test registers metadata (epic, feature, story, severity, tags, steps, evidence) which is flushed to temp JSON files.
 
 **Do NOT modify the reporter files.** They are ready to use as-is.
 
-#### reporter/metadata.ts
+The project structure will be:
 
-Exports `report()` function and `AllureCompat` class. Each test uses these to register metadata (epic, feature, story, severity, tags, steps, evidence). Metadata is written to temp JSON files that the reporter reads when tests finish.
-
-```typescript
-import { report } from './reporter/metadata';
-
-it('test name', async () => {
-  const t = report();
-  t.epic('Security');
-  t.feature('XSS Prevention');
-  t.story('Block script injection via v-html');
-  t.severity('blocker');
-  t.tag('Pentest', 'OWASP A03');
-  t.parameter('payload', '<script>alert("xss")</script>');
-  t.step('Prepare malicious payload');
-  // ... test logic ...
-  t.evidence('Result', { blocked: true });
-  await t.flush();
-});
 ```
-
-#### reporter/html-reporter.js
-
-Custom Vitest reporter (plain JavaScript — Vitest loads reporters with `require()`, not through ts transforms). Dual-compatible: supports both Vitest (`onFinished`) and Jest (`onRunComplete`) APIs. Implements:
-1. Reads `meta-*.json` files from temp directory
-2. Matches metadata with test results by `testPath::testName` key
-3. Generates self-contained HTML with CSS, JS, and embedded data
-4. Features: sidebar Epic-Feature-Story navigation, detail modal with severity badges, SVG charts, dark theme, search, PDF export
-5. Cleans up temp files
+test/security/
+├── *.security.spec.ts        ← Security test spec files
+└── vitest.security.config.ts ← Vitest config (points to .claude/ reporter)
+```
 
 #### vitest.security.config.ts
 
@@ -117,11 +81,14 @@ import { defineConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
 import path from 'path';
 
+const reporterPath = path.resolve(__dirname, '../../.claude/skills/goes-security-vue/reporter');
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '../..', 'src'),
+      '@security-reporter': reporterPath,
     },
   },
   test: {
@@ -130,12 +97,18 @@ export default defineConfig({
     include: ['test/security/**/*.security.spec.ts'],
     reporters: [
       'default',
-      ['./test/security/reporter/html-reporter.js', {
+      [path.join(reporterPath, 'html-reporter.js'), {
         outputPath: './reports/security/security-report.html',
       }],
     ],
   },
 });
+```
+
+The `@security-reporter` alias lets specs import metadata cleanly:
+
+```typescript
+import { report } from '@security-reporter/metadata';
 ```
 
 Add scripts to `package.json`:
@@ -176,7 +149,7 @@ Read `references/test-patterns-vue.md` for the exact code patterns to use.
 
 ```typescript
 import { describe, it, expect, vi } from 'vitest';
-import { report } from './reporter/metadata';
+import { report } from '@security-reporter/metadata';
 
 it('descriptive test name', async () => {
   const t = report();

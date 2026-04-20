@@ -63,7 +63,7 @@ When you activate the skill, Claude:
 
 1. Analyzes your components, stores, router, and composables
 2. Installs test dependencies if missing (vitest, @vue/test-utils)
-3. Copies the bundled reporter files (`html-reporter.js` + `metadata.ts`) into `test/security/reporter/`
+3. Configures Vitest to use the bundled reporter directly from `.claude/` (no file duplication)
 4. Configures Vitest with a dedicated security test config
 5. Generates `.security.spec.ts` files with:
    - Metadata (epic, feature, story, severity, tags) via `report()`

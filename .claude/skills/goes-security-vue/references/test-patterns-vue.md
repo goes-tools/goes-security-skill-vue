@@ -8,7 +8,7 @@ Exact patterns to use when generating tests. Copy and adapt to the real componen
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, shallowMount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import { report } from './reporter/metadata';
+import { report } from '@security-reporter/metadata';
 
 describe('ComponentName', () => {
   beforeEach(() => {
