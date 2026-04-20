@@ -30,6 +30,9 @@ your-vue-project/
     skills/
       goes-security-vue/
         SKILL.md                          <-- instructions for Claude
+        reporter/
+          html-reporter.js                <-- custom HTML reporter (bundled)
+          metadata.ts                     <-- metadata collector (bundled)
         references/
           goes-checklist-vue.md           <-- GOES checklist (frontend items)
           test-patterns-vue.md            <-- 8 code patterns
@@ -60,7 +63,7 @@ When you activate the skill, Claude:
 
 1. Analyzes your components, stores, router, and composables
 2. Installs test dependencies if missing (vitest, @vue/test-utils)
-3. Creates the custom reporter system in `test/security/reporter/`
+3. Copies the bundled reporter files (`html-reporter.js` + `metadata.ts`) into `test/security/reporter/`
 4. Configures Vitest with a dedicated security test config
 5. Generates `.security.spec.ts` files with:
    - Metadata (epic, feature, story, severity, tags) via `report()`

@@ -57,7 +57,16 @@ PKG_CMD add -D vitest @vue/test-utils
 
 ### STEP 3: Set up the custom reporter
 
-The reporter system lives in `test/security/reporter/` and consists of two files:
+This skill includes the reporter files bundled in the `reporter/` directory. Copy them into the project:
+
+```bash
+# Copy the bundled reporter files from the skill into the project
+mkdir -p test/security/reporter
+cp .claude/skills/goes-security-vue/reporter/html-reporter.js test/security/reporter/html-reporter.js
+cp .claude/skills/goes-security-vue/reporter/metadata.ts test/security/reporter/metadata.ts
+```
+
+The final structure in the project will be:
 
 ```
 test/security/
@@ -67,6 +76,8 @@ test/security/
 ├── *.security.spec.ts      ← Security test spec files
 └── vitest.security.config.ts ← Vitest config for security tests
 ```
+
+**Do NOT modify the reporter files.** They are ready to use as-is.
 
 #### reporter/metadata.ts
 
@@ -92,11 +103,11 @@ it('test name', async () => {
 
 #### reporter/html-reporter.js
 
-Custom Vitest reporter (plain JavaScript — Vitest loads reporters with `require()`, not through ts transforms). Implements `onFinished(files, errors)`:
+Custom Vitest reporter (plain JavaScript — Vitest loads reporters with `require()`, not through ts transforms). Dual-compatible: supports both Vitest (`onFinished`) and Jest (`onRunComplete`) APIs. Implements:
 1. Reads `meta-*.json` files from temp directory
 2. Matches metadata with test results by `testPath::testName` key
 3. Generates self-contained HTML with CSS, JS, and embedded data
-4. Features: sidebar Epic>Feature>Story navigation, detail modal with severity badges, SVG charts, dark theme, search, PDF export
+4. Features: sidebar Epic-Feature-Story navigation, detail modal with severity badges, SVG charts, dark theme, search, PDF export
 5. Cleans up temp files
 
 #### vitest.security.config.ts
