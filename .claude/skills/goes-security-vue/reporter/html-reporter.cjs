@@ -1739,6 +1739,7 @@ class SecurityHtmlReporter {
         <div class="modal-header">
           <div>
             <div class="modal-title">\${escapeHtml(test.fullName)}</div>
+            \${test.filePath ? \`<div class="modal-subtitle" style="font-size:11px;color:#a0a0a0;margin-top:4px;font-family:ui-monospace,monospace;">\uD83D\uDCC4 \${escapeHtml(test.filePath.split('/').slice(-3).join('/'))}</div>\` : ''}
           </div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
