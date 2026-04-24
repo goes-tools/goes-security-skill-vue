@@ -1,12 +1,12 @@
 /**
- * Security Reporter Helper — Metadata Collector (Vitest)
- * ───────────────────────────────────────────────────────
+ * Security Reporter Helper — Metadata Collector
+ * ───────────────────────────────────────────────
  * Collects metadata (epic, feature, story, severity, tags, parameters, steps, evidence)
  * per test and writes it to a temp JSON file that the custom SecurityHtmlReporter reads.
  *
  * Compatible with allure-js-commons API for zero-migration from existing Allure tests.
  *
- * Usage (Vitest):
+ * Usage:
  *   import { report } from './reporter/metadata';
  *
  *   it('test name', async () => {
@@ -14,7 +14,7 @@
  *     t.epic('Input Validation');
  *     t.severity('critical');
  *     t.parameter('email', 'test@goes.gob.sv');
- *     t.step('Validate input');
+ *     t.step('Validate DTO');
  *     // ... test logic ...
  *     t.evidence('Validation Result', { payload, errors });
  *     await t.flush();
@@ -153,13 +153,10 @@ class SecurityTestReporter {
 
   /**
    * Flush metadata to a temp JSON file.
-   * The custom reporter reads these files in onFinished.
-   *
-   * Works with both Vitest and Jest:
-   * - Vitest: expect.getState() provides currentTestName and testPath
-   * - Jest: same API via expect.getState()
+   * The custom reporter reads these files in onRunComplete.
    */
   async flush(): Promise<void> {
+    // Get current test name and path from Jest's global state
     try {
       const state = expect.getState();
       this.meta.testName = state.currentTestName || '';

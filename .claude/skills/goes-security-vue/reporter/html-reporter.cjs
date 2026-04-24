@@ -1,15 +1,17 @@
-
-
 /**
- * Security HTML Reporter — Vitest Custom Reporter
- * ─────────────────────────────────────────────────
- * Generates a self-contained HTML report with sidebar navigation,
- * detail modals, SVG charts, dark theme, search and PDF export.
+ * Security HTML Reporter — Vitest edition
+ * ───────────────────────────────────────
+ * Port of the Jest-based reporter in portafolio-it-be. Keeps the
+ * same AllureCompat metadata pipeline (temp JSON files under the
+ * OS tmp dir) and the same HTML + Excel output shape so both
+ * projects speak the same audit vocabulary.
  *
- * Vitest reporter API: constructor receives options from vitest config.
- * The onFinished(files, errors) hook is called when all tests complete.
- *
- * Compatible with both Vitest and Jest (detects API automatically).
+ * The only real difference vs. the Jest version is the entry-
+ * point hook: `onFinished(files, errors)` replaces
+ * `onRunComplete(testContexts, results)`. We build the same
+ * `results`-shaped object from Vitest's File[] so every downstream
+ * helper (buildStatusBreakdown, generateHtml, generateXlsx,
+ * generateId) stays untouched.
  */
 
 const fs = require('fs');
@@ -19,166 +21,123 @@ const os = require('os');
 class SecurityHtmlReporter {
 
   constructor(options) {
-    // Vitest passes options directly; Jest passes (globalConfig, options)
-    // Detect which API is being used
-    if (options && typeof options === 'object' && !options.rootDir) {
-      // Vitest: constructor(options)
-      this.options = {
-        outputPath: options?.outputPath || './reports/security/security-report.html',
-      };
-    } else {
-      // Jest: constructor(globalConfig, options)
-      this.globalConfig = options;
-      const jestOptions = arguments[1];
-      this.options = {
-        outputPath: jestOptions?.outputPath || './reports/security/security-report.html',
-      };
-    }
+    const opts = options && (options.outputPath || options.projectName)
+      ? options
+      : (arguments[1] || {});
+    this.options = {
+      outputPath: opts.outputPath || './reports/security/security-report.html',
+    };
   }
 
-  // ─── Vitest API ──────────────────────────────────────────────
-  // Vitest calls onFinished(files, errors) when all tests complete.
-  // Each file has .tasks[] with nested describes/tests.
+  onInit(ctx) {
+    this._vitestCtx = ctx;
+  }
 
+  /**
+   * Vitest 1.x/2.x hook — receives every `File` (test file) with
+   * its task tree. Kept for backwards compat.
+   */
   async onFinished(files, errors) {
-    const { metadataMap, tempDir } = this._readMetadata();
+    await this._emitReport(files || [], errors || []);
+  }
 
-    // Flatten Vitest file results into test list
-    const mergedTests = [];
-    let totalTests = 0, passedTests = 0, failedTests = 0, skippedTests = 0;
-    let totalDuration = 0;
+  /**
+   * Vitest 3.x / 4.x hook — replaces `onFinished`. Receives
+   * `TestModule[]` with methods like `.children.allTests()`.
+   * We normalise both shapes into a Jest-looking `results` object.
+   */
+  async onTestRunEnd(testModules, unhandledErrors) {
+    // TestModules have `moduleId` + `task` (old File-shaped tree).
+    // Fall back to the underlying task tree so the collector below
+    // works without knowing which API we are on.
+    const files = [];
+    for (const mod of testModules || []) {
+      const file = mod.task || mod; // Vitest 3/4 keeps .task
+      if (file) files.push(file);
+    }
+    await this._emitReport(files, unhandledErrors || []);
+  }
 
-    for (const file of (files || [])) {
-      const filePath = file.filepath || file.id || '';
-      const tasks = this._flattenTasks(file.tasks || [], filePath);
+  async _emitReport(files, errors) {
+    const results = this.toJestResults(files || []);
+    await this.onRunComplete(undefined, results);
+    if (errors && errors.length > 0) {
+      for (const err of errors) {
+        console.warn('⚠️  Security suite error:', err?.message || err);
+      }
+    }
+  }
 
-      for (const task of tasks) {
-        totalTests++;
-        const status = task.result?.state === 'pass' ? 'passed'
-          : task.result?.state === 'fail' ? 'failed'
-          : 'skipped';
-
-        if (status === 'passed') passedTests++;
-        else if (status === 'failed') failedTests++;
-        else skippedTests++;
-
-        const duration = task.result?.duration || 0;
-        totalDuration += duration;
-
-        // Build full name: "describe > describe > test name"
-        const fullName = task.fullName || task.name || '';
-        const key = `${filePath}::${fullName}`;
-        const metadata = metadataMap.get(key);
-
-        mergedTests.push({
-          id: this.generateId(),
-          name: task.name || '',
-          fullName,
+  /** Recursively flattens a Vitest task tree into a flat test list. */
+  collectTasks(tasks, into, filePath, prefix) {
+    for (const task of tasks || []) {
+      if (task.type === 'suite') {
+        const nextPrefix = prefix ? prefix + ' > ' + task.name : task.name;
+        this.collectTasks(task.tasks, into, filePath, nextPrefix);
+        continue;
+      }
+      if (task.type === 'test' || task.mode === 'run' || task.name) {
+        const state = task.result?.state || task.mode;
+        const status =
+          state === 'pass' ? 'passed'
+          : state === 'fail' ? 'failed'
+          : state === 'skip' || state === 'todo' ? 'pending'
+          : 'pending';
+        into.push({
+          title: task.name || '',
+          fullName: prefix ? prefix + ' > ' + task.name : task.name,
           status,
-          duration,
-          filePath,
-          errors: task.result?.errors?.map(e => e.message || String(e)) || [],
-          epic: metadata?.epic,
-          feature: metadata?.feature,
-          story: metadata?.story,
-          severity: metadata?.severity,
-          owner: metadata?.owner,
-          tags: metadata?.tags || [],
-          labels: metadata?.labels || {},
-          links: metadata?.links || [],
-          description: metadata?.description,
-          parameters: metadata?.parameters || [],
-          steps: metadata?.steps || [],
-          evidences: metadata?.evidences || [],
+          duration: task.result?.duration || 0,
+          failureMessages:
+            (task.result?.errors || []).map((e) => e?.stack || e?.message || String(e)),
         });
       }
     }
-
-    const summary = {
-      total: totalTests,
-      passed: passedTests,
-      failed: failedTests,
-      skipped: skippedTests,
-      suites: (files || []).length,
-    };
-
-    const reportData = {
-      meta: {
-        generatedAt: new Date().toISOString(),
-        duration: totalDuration,
-        project: 'Security Tests — Vue.js Frontend',
-      },
-      summary,
-      tests: mergedTests,
-    };
-
-    this._writeReport(reportData, summary);
-    this._cleanupTemp(tempDir);
   }
 
-  // ─── Jest API (backward compatible) ──────────────────────────
-  async onRunComplete(testContexts, results) {
-    const { metadataMap, tempDir } = this._readMetadata();
-
-    const mergedTests = [];
-    for (const testResult of results.testResults) {
-      for (const assertion of testResult.testResults) {
-        const key = `${testResult.testFilePath}::${assertion.fullName}`;
-        const metadata = metadataMap.get(key);
-
-        mergedTests.push({
-          id: this.generateId(),
-          name: assertion.title,
-          fullName: assertion.fullName,
-          status: assertion.status,
-          duration: assertion.duration || 0,
-          filePath: testResult.testFilePath,
-          errors: assertion.failureMessages || [],
-          epic: metadata?.epic,
-          feature: metadata?.feature,
-          story: metadata?.story,
-          severity: metadata?.severity,
-          owner: metadata?.owner,
-          tags: metadata?.tags || [],
-          labels: metadata?.labels || {},
-          links: metadata?.links || [],
-          description: metadata?.description,
-          parameters: metadata?.parameters || [],
-          steps: metadata?.steps || [],
-          evidences: metadata?.evidences || [],
-        });
+  /** Builds a Jest-shape `results` object from Vitest's File[]. */
+  toJestResults(files) {
+    const testResults = [];
+    let numPassedTests = 0;
+    let numFailedTests = 0;
+    let numPendingTests = 0;
+    let numTotalTests = 0;
+    for (const file of files) {
+      const list = [];
+      this.collectTasks(file.tasks, list, file.filepath, '');
+      for (const t of list) {
+        numTotalTests++;
+        if (t.status === 'passed') numPassedTests++;
+        else if (t.status === 'failed') numFailedTests++;
+        else numPendingTests++;
       }
+      testResults.push({
+        testFilePath: file.filepath,
+        testResults: list,
+        perfStats: {
+          start: file.result?.startTime || 0,
+          end: (file.result?.startTime || 0) + (file.result?.duration || 0),
+        },
+      });
     }
-
-    const summary = {
-      total: results.numTotalTests,
-      passed: results.numPassedTests,
-      failed: results.numFailedTests,
-      skipped: results.numPendingTests,
-      suites: results.testResults.length,
+    return {
+      testResults,
+      numTotalTests,
+      numPassedTests,
+      numFailedTests,
+      numPendingTests,
     };
-
-    const reportData = {
-      meta: {
-        generatedAt: new Date().toISOString(),
-        duration: results.testResults.reduce((acc, r) => acc + (r.perfStats?.end - r.perfStats?.start || 0), 0),
-        project: 'Security Tests',
-      },
-      summary,
-      tests: mergedTests,
-    };
-
-    this._writeReport(reportData, summary);
-    this._cleanupTemp(tempDir);
   }
 
-  // ─── Shared helpers ──────────────────────────────────────────
-
-  _readMetadata() {
+  async onRunComplete(
+    testContexts,
+    results,
+  ) {
     const tempDir =
       process.env.SECURITY_REPORTER_TEMP_DIR ||
       path.join(os.tmpdir(), 'security-html-reporter');
 
+    // Read metadata files
     const metadataMap = new Map();
     if (fs.existsSync(tempDir)) {
       const files = fs.readdirSync(tempDir);
@@ -195,34 +154,69 @@ class SecurityHtmlReporter {
         }
       }
     }
-    return { metadataMap, tempDir };
-  }
 
-  _flattenTasks(tasks, filePath) {
-    const result = [];
-    for (const task of tasks) {
-      if (task.type === 'test' || task.type === 'custom' || (!task.tasks && task.result)) {
-        // Build full name by traversing suite parents
-        let fullName = task.name || '';
-        let parent = task.suite;
-        const parts = [fullName];
-        while (parent && parent.name) {
-          parts.unshift(parent.name);
-          parent = parent.suite;
-        }
-        task.fullName = parts.join(' > ');
-        result.push(task);
-      }
-      if (task.tasks) {
-        result.push(...this._flattenTasks(task.tasks, filePath));
+    // Merge test results with metadata
+    const mergedTests = [];
+    for (const testResult of results.testResults) {
+      for (const assertion of testResult.testResults) {
+        const key = `${testResult.testFilePath}::${assertion.fullName}`;
+        const metadata = metadataMap.get(key);
+
+        const merged = {
+          id: this.generateId(),
+          name: assertion.title,
+          fullName: assertion.fullName,
+          status: assertion.status ,
+          duration: assertion.duration || 0,
+          filePath: testResult.testFilePath,
+          errors: assertion.failureMessages || [],
+          epic: metadata?.epic,
+          feature: metadata?.feature,
+          story: metadata?.story,
+          severity: metadata?.severity,
+          owner: metadata?.owner,
+          tags: metadata?.tags || [],
+          labels: metadata?.labels || {},
+          links: metadata?.links || [],
+          description: metadata?.description,
+          parameters: metadata?.parameters || [],
+          steps: metadata?.steps || [],
+          evidences: metadata?.evidences || [],
+        };
+
+        mergedTests.push(merged);
       }
     }
-    return result;
-  }
 
-  _writeReport(reportData, summary) {
+    // Build summary
+    const summary = {
+      total: results.numTotalTests,
+      passed: results.numPassedTests,
+      failed: results.numFailedTests,
+      skipped: results.numPendingTests,
+      suites: results.testResults.length,
+    };
+
+    // Extra derived sections for the dashboard and the xlsx.
+    const statusBreakdown = this.buildStatusBreakdown(mergedTests);
+    const owaspBreakdown = this.buildOwaspBreakdown(mergedTests);
+
+    const reportData = {
+      meta: {
+        generatedAt: new Date().toISOString(),
+        duration: results.testResults.reduce((acc, r) => acc + (r.perfStats?.end - r.perfStats?.start || 0), 0),
+        project: 'Portafolio IT Frontend',
+      },
+      summary,
+      statusBreakdown,
+      owaspBreakdown,
+      tests: mergedTests,
+    };
+
+    // Generate HTML
     const html = this.generateHtml(reportData);
 
+    // Write file
     const outputDir = path.dirname(this.options.outputPath);
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
@@ -230,6 +224,16 @@ class SecurityHtmlReporter {
 
     fs.writeFileSync(this.options.outputPath, html, 'utf-8');
 
+    // Sibling artifact — Excel workbook. Lives next to the HTML so
+    // the link in the report can use a relative basename reference.
+    const xlsxPath = this.options.outputPath.replace(/\.html$/, '.xlsx');
+    try {
+      this.generateXlsx(reportData, xlsxPath);
+    } catch (err) {
+      console.warn('⚠️  Could not generate Excel report:', err.message);
+    }
+
+    // Log success
     const absPath = path.resolve(this.options.outputPath);
     console.log(
       `\n📊 Security Report generated: ${absPath}`,
@@ -237,9 +241,11 @@ class SecurityHtmlReporter {
     console.log(
       `   ${summary.total} tests | ${summary.passed} passed | ${summary.failed} failed | ${reportData.meta.duration}ms`,
     );
-  }
+    if (fs.existsSync(xlsxPath)) {
+      console.log(`   📑 Excel:  ${path.resolve(xlsxPath)}`);
+    }
 
-  _cleanupTemp(tempDir) {
+    // Cleanup temp files
     if (fs.existsSync(tempDir)) {
       try {
         const files = fs.readdirSync(tempDir);
@@ -256,6 +262,180 @@ class SecurityHtmlReporter {
 
   generateId() {
     return Math.random().toString(36).substring(2, 11);
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // EXTENSIONS (added to the local copy of the reporter)
+  //
+  //  · buildStatusBreakdown — splits tests into passed /
+  //    failed / deactivated / migrated / n-a for the dashboard
+  //    and the Excel workbook.
+  //  · buildOwaspBreakdown — counts tests per OWASP Top 10
+  //    category using the `OWASP-A\d+` tags.
+  //  · generateXlsx — writes a sibling `.xlsx` file using
+  //    SheetJS. The HTML exposes a "Descargar Excel" link.
+  // ──────────────────────────────────────────────────────────
+
+  /** Categorise each merged test entry by intent-driven status. */
+  buildStatusBreakdown(tests) {
+    const bucket = {
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+      notApplicable: 0,
+      deactivated: 0,
+      migrated: 0,
+    };
+    for (const t of tests) {
+      const tags = (t.tags || []).map((s) => String(s).toLowerCase());
+      const statusLabel = (t.labels && t.labels.status ? String(t.labels.status) : '').toLowerCase();
+      if (t.status === 'failed') {
+        bucket.failed++;
+      } else if (t.status === 'skipped' || t.status === 'pending') {
+        bucket.skipped++;
+      } else if (tags.includes('n/a') || statusLabel === 'not-applicable') {
+        bucket.notApplicable++;
+      } else if (tags.includes('deactivated') || statusLabel === 'deactivated') {
+        bucket.deactivated++;
+      } else if (tags.includes('migrated') || statusLabel === 'migrated') {
+        bucket.migrated++;
+      } else if (t.status === 'passed') {
+        bucket.passed++;
+      }
+    }
+    return bucket;
+  }
+
+  /** Counts tests per OWASP Top 10 category (A01 … A10). */
+  buildOwaspBreakdown(tests) {
+    const counts = {};
+    for (const t of tests) {
+      for (const rawTag of t.tags || []) {
+        const m = String(rawTag).toUpperCase().match(/OWASP-?(A\d{2})/);
+        if (m) {
+          counts[m[1]] = (counts[m[1]] || 0) + 1;
+        }
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * Extracts GOES-R\d+ identifiers from tags and groups tests under
+   * each requirement. Tests that do not carry a requirement are
+   * excluded from the matrix (they appear in the main test list
+   * regardless).
+   */
+  /**
+   * Writes a sibling `.xlsx` file next to the HTML. One sheet per
+   * intent bucket (Passed / Deactivated / Migrated / N/A / Failed)
+   * plus a Summary sheet.
+   */
+  generateXlsx(reportData, outputPath) {
+    let XLSX;
+    try {
+      // Lazy-required so the reporter still works (HTML only) if
+      // the dev dependency was not installed for some reason.
+      XLSX = require('xlsx');
+    } catch {
+      console.warn('⚠️  `xlsx` not installed — skipping Excel generation.');
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Summary sheet ─────────────────────────────────────
+    const summaryRows = [
+      ['Proyecto', reportData.meta.project],
+      ['Generado', reportData.meta.generatedAt],
+      ['Duración (ms)', reportData.meta.duration],
+      [],
+      ['Total', reportData.summary.total],
+      ['Pasados', reportData.statusBreakdown.passed],
+      ['Fallidos', reportData.statusBreakdown.failed],
+      ['Skipped', reportData.statusBreakdown.skipped],
+      ['Desactivados', reportData.statusBreakdown.deactivated],
+      ['Migrados', reportData.statusBreakdown.migrated],
+      ['No aplicables (N/A)', reportData.statusBreakdown.notApplicable],
+    ];
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+    summarySheet['!cols'] = [{ wch: 26 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, summarySheet, 'Resumen');
+
+    // ── Detailed test list split by bucket ────────────────
+    const header = [
+      'Archivo',
+      'Epic',
+      'Feature',
+      'Story',
+      'Nombre',
+      'Estado',
+      'Severidad',
+      'Tags',
+      'Duración (ms)',
+      'Descripción',
+    ];
+    const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+    const row = (t) => [
+      path.basename(t.filePath || ''),
+      t.epic || '',
+      t.feature || '',
+      t.story || '',
+      t.name || '',
+      this.intentStatusOf(t),
+      t.severity || '',
+      (t.tags || []).join(', '),
+      t.duration || 0,
+      stripHtml(t.description),
+    ];
+
+    const buckets = {
+      Pasados: [],
+      Fallidos: [],
+      Desactivados: [],
+      Migrados: [],
+      'No aplicables': [],
+    };
+    for (const t of reportData.tests) {
+      const intent = this.intentStatusOf(t);
+      if (intent === 'Pasado') buckets['Pasados'].push(t);
+      else if (intent === 'Fallido') buckets['Fallidos'].push(t);
+      else if (intent === 'Desactivado') buckets['Desactivados'].push(t);
+      else if (intent === 'Migrado') buckets['Migrados'].push(t);
+      else if (intent === 'No aplicable') buckets['No aplicables'].push(t);
+    }
+    for (const [sheetName, items] of Object.entries(buckets)) {
+      if (items.length === 0) continue;
+      const sheet = XLSX.utils.aoa_to_sheet([header, ...items.map(row)]);
+      sheet['!cols'] = [
+        { wch: 30 },
+        { wch: 24 },
+        { wch: 24 },
+        { wch: 30 },
+        { wch: 60 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 26 },
+        { wch: 10 },
+        { wch: 80 },
+      ];
+      XLSX.utils.book_append_sheet(wb, sheet, sheetName);
+    }
+
+    XLSX.writeFile(wb, outputPath);
+  }
+
+  /** Maps raw jest status + tags to a Spanish intent label. */
+  intentStatusOf(t) {
+    const tags = (t.tags || []).map((s) => String(s).toLowerCase());
+    const statusLabel = (t.labels && t.labels.status ? String(t.labels.status) : '').toLowerCase();
+    if (t.status === 'failed') return 'Fallido';
+    if (t.status === 'skipped' || t.status === 'pending') return 'Skipped';
+    if (tags.includes('n/a') || statusLabel === 'not-applicable') return 'No aplicable';
+    if (tags.includes('deactivated') || statusLabel === 'deactivated') return 'Desactivado';
+    if (tags.includes('migrated') || statusLabel === 'migrated') return 'Migrado';
+    if (t.status === 'passed') return 'Pasado';
+    return t.status || 'Otro';
   }
 
   generateHtml(reportData) {
@@ -979,9 +1159,13 @@ class SecurityHtmlReporter {
       <div class="header">
         <div class="header-title">Security Test Report</div>
         <div class="header-actions">
-          <button class="btn btn-primary" onclick="window.print()">
-            📥 Export PDF
-          </button>
+          <!-- Only the Excel download ships in the toolbar. The PDF
+               export and the SVG badge were removed because: the
+               PDF-via-print was a lossy representation, and the badge
+               was never embedded into the report itself. -->
+          <a class="btn btn-primary" href="security-report.xlsx" download>
+            📑 Descargar Excel
+          </a>
         </div>
       </div>
 
