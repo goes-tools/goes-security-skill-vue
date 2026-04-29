@@ -67,7 +67,7 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     t.step('Prepare: spy on the refresh adapter')
     const refresh = vi.fn().mockResolvedValue(okResult)
     setRefreshAdapter({ refresh })
-    t.evidence('Input - attacker pattern simulated', {
+    t.evidence('attacker pattern simulated (input)', {
       scenario: 'three concurrent 401s from different axios requests',
       okResult,
     })
@@ -84,7 +84,7 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     expect(b).toBe(c)
     expect(refresh).toHaveBeenCalledTimes(1)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       adapterCalls: refresh.mock.calls.length,
       sharedPromise: a === b && b === c,
       backendSaved: 2,
@@ -113,7 +113,7 @@ describe('[GOES Security FE] refresh-coordinator', () => {
 
     t.step('Prepare: prime the cache with one refresh')
     await refreshAccessToken()
-    t.evidence('Input - cascade scenario simulated', {
+    t.evidence('cascade scenario simulated (input)', {
       warmups: 1,
       subsequentCalls: 2,
       cooldownMs: 5_000,
@@ -126,7 +126,7 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     t.step('Verify: only the first call hit the backend')
     expect(refresh).toHaveBeenCalledTimes(1)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       adapterCalls: refresh.mock.calls.length,
       reusedFromCooldown: 2,
     })
@@ -165,10 +165,10 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     )
     expect(afterReset).toBe(2)
 
-    t.evidence('Input - sequence', {
+    t.evidence('sequence (input)', {
       order: ['refresh', 'resetRefreshCoordinator', 'refresh'],
     })
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       callsBeforeReset: beforeReset,
       callsAfterReset: afterReset,
       crossSessionReuseBlocked: afterReset === 2,
@@ -194,7 +194,7 @@ describe('[GOES Security FE] refresh-coordinator', () => {
 
     const refresh = vi.fn().mockRejectedValue(new Error('boom'))
     setRefreshAdapter({ refresh })
-    t.evidence('Input - failing backend', {
+    t.evidence('failing backend (input)', {
       adapterMockedTo: 'reject with Error("boom") every call',
       expectedMaxAttempts: MAX_REFRESH_ATTEMPTS,
     })
@@ -205,7 +205,7 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     t.step('Verify: the adapter was invoked exactly MAX_REFRESH_ATTEMPTS times')
     expect(refresh).toHaveBeenCalledTimes(MAX_REFRESH_ATTEMPTS)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       adapterCalls: refresh.mock.calls.length,
       capEnforced: refresh.mock.calls.length === MAX_REFRESH_ATTEMPTS,
       loopPrevented: true,

@@ -51,7 +51,7 @@ describe('[GOES Security FE] api client · axios defaults', () => {
 
     t.step('Prepare: read the axios defaults directly from the shared client')
     const actual = api.defaults.withCredentials
-    t.evidence('Input - axios defaults snapshot', {
+    t.evidence('axios defaults snapshot (input)', {
       withCredentials: actual,
       baseURL: api.defaults.baseURL,
       timeoutMs: api.defaults.timeout,
@@ -60,7 +60,7 @@ describe('[GOES Security FE] api client · axios defaults', () => {
     t.step('Verify: withCredentials is strictly true')
     expect(actual).toBe(true)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       refreshCookieRidesEveryRequest: actual === true,
       consequence:
         actual === true
@@ -88,7 +88,7 @@ describe('[GOES Security FE] api client · axios defaults', () => {
 
     t.step('Prepare: read the configured timeout (ms) from the axios instance')
     const timeout = api.defaults.timeout ?? 0
-    t.evidence('Input - axios timeout config', {
+    t.evidence('axios timeout config (input)', {
       timeoutMs: timeout,
       acceptableRange: { min: 1, max: 60_000 },
     })
@@ -97,7 +97,7 @@ describe('[GOES Security FE] api client · axios defaults', () => {
     expect(timeout).toBeGreaterThan(0)
     expect(timeout).toBeLessThanOrEqual(60_000)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       bounded: timeout > 0 && timeout <= 60_000,
       consequence: 'hung backend cannot starve the UI thread',
     })
@@ -124,7 +124,7 @@ describe('[GOES Security FE] api client · axios defaults', () => {
     )
 
     t.step('Prepare: assert the baseURL default is truthy (client wired up)')
-    t.evidence('Input - axios baseURL', {
+    t.evidence('axios baseURL (input)', {
       baseURL: api.defaults.baseURL,
     })
 
@@ -138,7 +138,7 @@ describe('[GOES Security FE] api client · axios defaults', () => {
     // invariant the interceptor depends on (baseURL configured).
     expect(api.defaults.baseURL).toBeTruthy()
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       interceptorContract:
         'Authorization header is attached ONLY if auth.accessToken is truthy',
       emptyTokenRisk:

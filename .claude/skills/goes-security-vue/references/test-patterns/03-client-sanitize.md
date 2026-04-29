@@ -53,7 +53,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
       '<iframe src="//evil"></iframe>',
       '<!-- comment -->',
     ]
-    t.evidence('Input - attacker payloads', { payloads })
+    t.evidence('attacker payloads (input)', { payloads })
 
     t.step('Execute: run each payload through containsUnsafeHtml')
     const results = payloads.map((p) => ({
@@ -65,7 +65,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     for (const { payload } of results)
       expect(containsUnsafeHtml(payload)).toBe(true)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       allRejected: results.every((r) => r.rejected),
       breakdown: results,
     })
@@ -94,7 +94,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
       ' onmouseover = "x"',
       '<a onclick="do()">x</a>',
     ]
-    t.evidence('Input - attacker payloads', {
+    t.evidence('attacker payloads (input)', {
       payloads,
       note: 'leading whitespace required by the regex to avoid false positives on words like "button"',
     })
@@ -106,7 +106,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     const benign = containsUnsafeHtml('button pressed')
     expect(benign).toBe(false)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       payloadsBlocked: payloads.length,
       benignFalsePositiveCheck: benign === false ? 'passed' : 'FAILED',
     })
@@ -133,12 +133,12 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
       'vbscript:msgbox(1)',
       'data:text/html,<script>',
     ]
-    t.evidence('Input - attacker payloads', { payloads })
+    t.evidence('attacker payloads (input)', { payloads })
 
     t.step('Execute + Verify: every scheme payload flagged')
     for (const p of payloads) expect(containsUnsafeHtml(p)).toBe(true)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       payloadsBlocked: payloads.length,
     })
 
@@ -160,12 +160,12 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     )
 
     const inputs = ['a<b', 'x > 5', '< 5 rows', '', null, undefined]
-    t.evidence('Input - benign comparison/null variants', { inputs })
+    t.evidence('benign comparison/null variants (input)', { inputs })
 
     t.step('Execute + Verify: every benign input must be accepted')
     for (const v of inputs) expect(containsUnsafeHtml(v as string)).toBe(false)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       falsePositives: 0,
       inputsTested: inputs.length,
     })
@@ -194,7 +194,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
       migration: { observations: '<img onerror=1>' },
     }
     const cleanPayload = { name: 'ok', description: 'x > 5' }
-    t.evidence('Input - payloads', { flatPayload, nestedPayload, cleanPayload })
+    t.evidence('payloads (input)', { flatPayload, nestedPayload, cleanPayload })
 
     t.step('Execute: firstUnsafeKey on each')
     const flatResult = firstUnsafeKey(flatPayload)
@@ -208,7 +208,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     expect(nestedResult).toBe('migration.observations')
     expect(cleanResult).toBeNull()
 
-    t.evidence('Output - firstUnsafeKey results', {
+    t.evidence('firstUnsafeKey results (output)', {
       flat: flatResult,
       nested: nestedResult,
       clean: cleanResult,
@@ -230,7 +230,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
         '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A05_2021-Security_Misconfiguration/" target="_blank" rel="noopener">OWASP A05</a>.</p>',
     )
 
-    t.evidence('Input - copy under audit', {
+    t.evidence('copy under audit (input)', {
       message: INVALID_INPUT_MESSAGE,
       forbiddenTokens: ['html', 'script', 'tag', 'regex'],
     })
@@ -239,7 +239,7 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     expect(INVALID_INPUT_MESSAGE).not.toMatch(/html|script|tag|regex/i)
     expect(INVALID_INPUT_MESSAGE.length).toBeGreaterThan(0)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       messageLength: INVALID_INPUT_MESSAGE.length,
       leaksDetectionSurface: /html|script|tag|regex/i.test(
         INVALID_INPUT_MESSAGE,

@@ -254,7 +254,7 @@ t.descriptionHtml(
 ```typescript
 t.step('Prepare: mock the dependency / authenticate / setup state')
 const input = { ... }
-t.evidence('Input - attacker payload OR test scenario', input)
+t.evidence('Attacker payload (input)', input)
 
 t.step('Execute: call the function under test')
 const result = ...
@@ -262,13 +262,33 @@ const result = ...
 t.step('Verify: assertions match the expected defense')
 expect(result).toEqual(...)
 
-t.evidence('Output - defense result', {
+t.evidence('Defense result (output)', {
   resolved: ...,
   consequence: 'human-readable summary of what defended us',
 })
 
 await t.flush()
 ```
+
+### Naming convention for `t.evidence()`
+
+The HTML modal renders each evidence block as a sub-section titled with the
+exact label string. To match the BE skill output and keep audit reports
+visually consistent, ALWAYS name evidence with the role at the END in
+parentheses:
+
+| Label format                                    | Renders as                  |
+|-------------------------------------------------|-----------------------------|
+| `'Attacker payload (input)'`                    | "Attacker payload (input)" |
+| `'Request body (input)'`                        | "Request body (input)"     |
+| `'Defense response (output)'`                   | "Defense response (output)" |
+| `'Service response (output)'`                   | "Service response (output)" |
+| `'Effective behavior (output)'`                 | "Effective behavior (output)" |
+| `'Auth result (output)'`                        | "Auth result (output)"     |
+
+NEVER prefix with `'Input - …'` / `'Output - …'` — that breaks visual
+parity with the BE report (the auditor expects the role between
+parentheses). Use the BE convention.
 
 **Cada test DEBE incluir:**
 
@@ -508,5 +528,5 @@ Ver `references/test-patterns/` para el codigo completo de cada pattern.
 13. **Specs unit terminan en `.security-html.spec.ts`**; E2E en `.security.spec.ts` dentro de `tests/e2e/`.
 14. **E2E requieren backend real** — el helper `backendIsUp()` skipea el suite automaticamente si `/api/auth/session` no responde.
 15. **Reemplazar emojis UI por Lucide** sistemicamente — politica del proyecto (PASO 8.1).
-16. **Cada `t.evidence('Input -' / 'Output -')`** documenta el payload y la respuesta de defensa. Sin esto el reporte queda sin valor de auditoria.
+16. **Cada `t.evidence('<name> (input)' / '<name> (output)')`** documenta el payload y la respuesta de defensa con el rol entre parentesis al final (matchea la convencion del BE skill). Sin esto el reporte queda sin valor de auditoria.
 17. **Cada `descriptionHtml` debe linkear a owasp.org** con `<a href target="_blank" rel="noopener">`.

@@ -8,7 +8,7 @@ The Pinia auth store is the client-side identity surface. Three invariants prote
 2. `hasRole()` / `hasAnyRole()` use **strict equality** — no prefix / case-insensitive matches.
 3. `can()` derives from the **PERMISOS map** (administrador / tecnico / usuario), never from a free-form role string. Unknown perfiles fall back to `usuario` (fail-closed).
 
-Each test ships `t.evidence('Input - …')` (the attacker tampering attempt) and `t.evidence('Output - …')` (the store state after the action) so the HTML report shows exactly what was tried and how the defence reacted.
+Each test ships `t.evidence('… (input)')` (the attacker tampering attempt) and `t.evidence('… (output)')` (the store state after the action) so the HTML report shows exactly what was tried and how the defence reacted.
 
 ## Example spec — `tests/security/auth-store.security-html.spec.ts`
 
@@ -91,7 +91,7 @@ describe('[GOES Security FE] auth.store', () => {
     const auth = useAuthStore()
     const authenticated = session()
     auth.setSession(authenticated)
-    t.evidence('Input - session before logout', {
+    t.evidence('session before logout (input)', {
       accessToken: authenticated.accessToken,
       user: authenticated.user,
       accessExpiresAt: authenticated.accessExpiresAt,
@@ -111,7 +111,7 @@ describe('[GOES Security FE] auth.store', () => {
     expect(auth.accessExpiresAt).toBeNull()
     expect(auth.idleExpiresAt).toBeNull()
 
-    t.evidence('Output - store snapshot after clearSession', {
+    t.evidence('store snapshot after clearSession (output)', {
       accessToken: auth.accessToken,
       user: auth.user,
       roles: auth.roles,
@@ -141,7 +141,7 @@ describe('[GOES Security FE] auth.store', () => {
     t.step('Prepare: authenticate as admin (roles: ["admin"])')
     const auth = useAuthStore()
     auth.setSession(session({ user: user({ roles: ['admin'] }) }))
-    t.evidence('Input - attacker role-tampering candidates', {
+    t.evidence('attacker role-tampering candidates (input)', {
       legitimate: 'admin',
       payloads: ['Admin', 'ADMIN', 'admins', 'usuario'],
     })
@@ -156,7 +156,7 @@ describe('[GOES Security FE] auth.store', () => {
     expect(auth.hasRole('admins')).toBe(false)
     expect(auth.hasRole('usuario')).toBe(false)
 
-    t.evidence('Output - hasRole decisions per payload', {
+    t.evidence('hasRole decisions per payload (output)', {
       admin: auth.hasRole('admin'),
       // @ts-expect-error - intentional
       Admin: auth.hasRole('Admin'),
@@ -196,7 +196,7 @@ describe('[GOES Security FE] auth.store', () => {
     expect(overlap).toBe(true)
     expect(empty).toBe(true)
 
-    t.evidence('Input - required-role sets tested', {
+    t.evidence('required-role sets tested (input)', {
       userRoles: ['usuario'],
       scenarios: {
         disjoint: ['admin', 'tecnico'],
@@ -204,7 +204,7 @@ describe('[GOES Security FE] auth.store', () => {
         empty: [],
       },
     })
-    t.evidence('Output - hasAnyRole() per scenario', {
+    t.evidence('hasAnyRole() per scenario (output)', {
       disjoint,
       overlap,
       empty_means_public: empty,
@@ -266,11 +266,11 @@ describe('[GOES Security FE] auth.store', () => {
     expect(usr.agregar).toBe(false)
     expect(usr.verMantenedor).toBe(false)
 
-    t.evidence('Input - perfiles tested', {
+    t.evidence('perfiles tested (input)', {
       perfiles: ['administrador', 'tecnico', 'usuario'],
       flags: ['eliminar', 'editar', 'agregar', 'verMantenedor'],
     })
-    t.evidence('Output - permissions matrix cells derived from can()', {
+    t.evidence('permissions matrix cells derived from can() (output)', {
       administrador: admin,
       tecnico: tec,
       usuario: usr,
@@ -296,7 +296,7 @@ describe('[GOES Security FE] auth.store', () => {
     t.step('Prepare: authenticate with a perfil unknown to the FE (supervisor)')
     const auth = useAuthStore()
     auth.setSession(session({ user: user({ perfil: 'supervisor' }) }))
-    t.evidence('Input - attacker payload', {
+    t.evidence('attacker payload (input)', {
       injectedPerfil: 'supervisor',
       attackerGoal: 'fail-open to admin-grade permissions',
     })
@@ -313,7 +313,7 @@ describe('[GOES Security FE] auth.store', () => {
     expect(decisions.editar).toBe(false)
     expect(decisions.verMantenedor).toBe(false)
 
-    t.evidence('Output - fallback permissions (must equal usuario)', decisions)
+    t.evidence('fallback permissions (must equal usuario) (output)', decisions)
 
     await t.flush()
   })

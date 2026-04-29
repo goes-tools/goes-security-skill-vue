@@ -126,7 +126,7 @@ describe('[GOES Security FE] router/guards', () => {
 
     t.step('Prepare: no session, navigate to /dashboard/maintainer')
     const to = route('/dashboard/maintainer', { requiresAuth: true })
-    t.evidence('Input - navigation attempt', {
+    t.evidence('navigation attempt (input)', {
       path: to.path,
       meta: to.meta,
       storeState: 'no session',
@@ -141,7 +141,7 @@ describe('[GOES Security FE] router/guards', () => {
       query: { redirect: '/dashboard/maintainer' },
     })
 
-    t.evidence('Output - guard decision', {
+    t.evidence('guard decision (output)', {
       redirect: result,
       preservedRedirectQuery: '/dashboard/maintainer',
     })
@@ -166,7 +166,7 @@ describe('[GOES Security FE] router/guards', () => {
     const auth = useAuthStore()
     auth.setSession(session())
     const to = route('/login', { guestOnly: true })
-    t.evidence('Input - navigation attempt', {
+    t.evidence('navigation attempt (input)', {
       path: to.path,
       meta: to.meta,
       storeState: 'authenticated (usuario)',
@@ -178,7 +178,7 @@ describe('[GOES Security FE] router/guards', () => {
     t.step('Verify: guard bounces to the portfolio-category route')
     expect(result).toMatchObject({ name: 'portfolio-category' })
 
-    t.evidence('Output - guard decision', { redirect: result })
+    t.evidence('guard decision (output)', { redirect: result })
 
     await t.flush()
   })
@@ -205,7 +205,7 @@ describe('[GOES Security FE] router/guards', () => {
       requiresAuth: true,
       roles: ['admin'],
     })
-    t.evidence('Input - navigation attempt', {
+    t.evidence('navigation attempt (input)', {
       path: to.path,
       meta: to.meta,
       userRoles: ['usuario'],
@@ -218,7 +218,7 @@ describe('[GOES Security FE] router/guards', () => {
     t.step('Verify: guard resolves to the forbidden route')
     expect(result).toMatchObject({ name: 'forbidden' })
 
-    t.evidence('Output - guard decision', { redirect: result })
+    t.evidence('guard decision (output)', { redirect: result })
 
     await t.flush()
   })
@@ -249,7 +249,7 @@ describe('[GOES Security FE] router/guards', () => {
     ] as unknown as RouteLocationNormalized['matched']
 
     const to = route('/dashboard/anything', { requiresAuth: true }, matched)
-    t.evidence('Input - route chain', {
+    t.evidence('route chain (input)', {
       path: to.path,
       childMeta: to.meta,
       parentChain: matched.map((r) => (r as { meta: unknown }).meta),
@@ -262,7 +262,7 @@ describe('[GOES Security FE] router/guards', () => {
     t.step('Verify: guard reads the parent roles and redirects to forbidden')
     expect(result).toMatchObject({ name: 'forbidden' })
 
-    t.evidence('Output - guard decision', {
+    t.evidence('guard decision (output)', {
       redirect: result,
       parentRoleInheritanceWorks: true,
     })

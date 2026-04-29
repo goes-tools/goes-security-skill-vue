@@ -100,7 +100,7 @@ describe('[GOES Security FE] RBAC · PERMISOS matrix', () => {
         )
 
         t.step('Prepare: pick the (perfil, flag) cell under audit')
-        t.evidence('Input - cell coordinates', {
+        t.evidence('cell coordinates (input)', {
           perfil,
           flag,
           expectedValue: value,
@@ -112,7 +112,7 @@ describe('[GOES Security FE] RBAC · PERMISOS matrix', () => {
         t.step('Verify: actual === expected (pinned contract)')
         expect(actual).toBe(value)
 
-        t.evidence('Output - audit result', {
+        t.evidence('audit result (output)', {
           perfil,
           flag,
           expected: value,
@@ -143,7 +143,7 @@ describe('[GOES Security FE] RBAC · PERMISOS matrix', () => {
 
     t.step('Prepare: look up a perfil not registered in PERMISOS')
     const unknownPerfil = 'no-existe'
-    t.evidence('Input - attacker tamper', {
+    t.evidence('attacker tamper (input)', {
       tamperedPerfil: unknownPerfil,
       attackerGoal: 'fail-open to admin privileges',
     })
@@ -159,7 +159,7 @@ describe('[GOES Security FE] RBAC · PERMISOS matrix', () => {
     expect(fallback.editar).toBe(false)
     expect(fallback.verMantenedor).toBe(false)
 
-    t.evidence('Output - resolved permissions', fallback)
+    t.evidence('resolved permissions (output)', fallback)
 
     await t.flush()
   })
@@ -208,7 +208,7 @@ describe('[GOES Security FE] v-html audit · no raw HTML sinks', () => {
     t.step('Prepare: walk src/ and collect every .vue / .ts / .tsx file')
     const srcRoot = path.resolve(__dirname, '..', '..', 'src')
     const scanned = walk(srcRoot, ['.vue', '.ts', '.tsx'])
-    t.evidence('Input - scan scope', {
+    t.evidence('scan scope (input)', {
       srcRoot: srcRoot.replace(process.cwd(), '.'),
       filesScanned: scanned.length,
       extensions: ['.vue', '.ts', '.tsx'],
@@ -234,7 +234,7 @@ describe('[GOES Security FE] v-html audit · no raw HTML sinks', () => {
     t.step('Verify: offenders list is empty')
     expect(offenders).toEqual([])
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       filesScanned: scanned.length,
       offendersFound: offenders.length,
       offenders,
@@ -278,7 +278,7 @@ describe('[GOES Security FE] LoginView · autocomplete hygiene', () => {
 
     t.step('Prepare: locate the <input type="email"> block in LoginView.vue')
     const emailBlock = loginSource.match(/<input[^>]*type=["']email["'][^>]*>/s)
-    t.evidence('Input - LoginView.vue email tag', {
+    t.evidence('LoginView.vue email tag (input)', {
       file: 'src/features/auth/views/LoginView.vue',
       tagFound: !!emailBlock,
       tag: emailBlock?.[0] ?? null,
@@ -288,7 +288,7 @@ describe('[GOES Security FE] LoginView · autocomplete hygiene', () => {
     expect(emailBlock, 'no <input type="email"> found').toBeTruthy()
     expect(emailBlock![0]).toMatch(/autocomplete=["'](email|username)["']/)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       autocompleteValue: emailBlock?.[0].match(
         /autocomplete=["']([^"']+)["']/,
       )?.[1],
@@ -323,7 +323,7 @@ describe('[GOES Security FE] LoginView · autocomplete hygiene', () => {
     const passwordBlock = loginSource.match(
       /<input[^>]*id=["']password["'][^>]*>/s,
     )
-    t.evidence('Input - LoginView.vue password tag', {
+    t.evidence('LoginView.vue password tag (input)', {
       file: 'src/features/auth/views/LoginView.vue',
       tagFound: !!passwordBlock,
       tag: passwordBlock?.[0] ?? null,
@@ -334,7 +334,7 @@ describe('[GOES Security FE] LoginView · autocomplete hygiene', () => {
     expect(passwordBlock![0]).toMatch(/autocomplete=["']current-password["']/)
     expect(passwordBlock![0]).not.toMatch(/autocomplete=["']off["']/)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       autocompleteValue: passwordBlock?.[0].match(
         /autocomplete=["']([^"']+)["']/,
       )?.[1],
@@ -369,7 +369,7 @@ describe('[GOES Security FE] LoginView · autocomplete hygiene', () => {
     const preventOrPost = /@submit\.prevent|method=["']post["']/i.test(
       loginSource,
     )
-    t.evidence('Input - LoginView.vue form audit', {
+    t.evidence('LoginView.vue form audit (input)', {
       file: 'src/features/auth/views/LoginView.vue',
       hasExplicitMethodGet: getMethodFound,
       usesSubmitPreventOrMethodPost: preventOrPost,
@@ -379,7 +379,7 @@ describe('[GOES Security FE] LoginView · autocomplete hygiene', () => {
     expect(loginSource).not.toMatch(/<form[^>]*method=["']get["']/i)
     expect(loginSource).toMatch(/@submit\.prevent|method=["']post["']/i)
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       credentialsTravelInUrl: getMethodFound,
       safeSubmissionPath: preventOrPost,
     })

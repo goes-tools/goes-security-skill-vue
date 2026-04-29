@@ -57,7 +57,7 @@ describe('[GOES Security FE] auth.service · error messages', () => {
     ;(err as { response?: unknown }).response = { status: 401, data: {} }
     const spy = vi.spyOn(api, 'post').mockRejectedValueOnce(err)
     const attempt = { email: 'admin@goes.gob.sv', password: 'whatever' }
-    t.evidence('Input - attacker login attempt', {
+    t.evidence('attacker login attempt (input)', {
       attempt,
       backendResponse: { status: 401, body: {} },
     })
@@ -74,7 +74,7 @@ describe('[GOES Security FE] auth.service · error messages', () => {
     expect(thrown).toBeTruthy()
     expect(thrown!.message).toBe('Credenciales invalidas')
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       messageShownToUser: thrown?.message,
       userEnumerationPossible: false,
     })
@@ -104,7 +104,7 @@ describe('[GOES Security FE] auth.service · error messages', () => {
       data: { message: 'No se pudo completar el registro' },
     }
     const spy = vi.spyOn(api, 'post').mockRejectedValueOnce(err)
-    t.evidence('Input - backend payload', {
+    t.evidence('backend payload (input)', {
       status: 409,
       body: { message: 'No se pudo completar el registro' },
     })
@@ -120,7 +120,7 @@ describe('[GOES Security FE] auth.service · error messages', () => {
     t.step('Verify: the thrown message equals the backend message verbatim')
     expect(thrown!.message).toBe('No se pudo completar el registro')
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       messageForwarded: thrown?.message,
       forwardedVerbatim: true,
     })
@@ -145,7 +145,7 @@ describe('[GOES Security FE] auth.service · error messages', () => {
 
     t.step('Prepare: mock /auth/login to reject with a bare Error("boom")')
     const spy = vi.spyOn(api, 'post').mockRejectedValueOnce(new Error('boom'))
-    t.evidence('Input - raw failure', {
+    t.evidence('raw failure (input)', {
       errorName: 'Error',
       errorMessage: 'boom',
     })
@@ -161,7 +161,7 @@ describe('[GOES Security FE] auth.service · error messages', () => {
     t.step('Verify: the thrown message is the neutral fallback')
     expect(thrown!.message).toBe('No fue posible iniciar sesion')
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       messageShownToUser: thrown?.message,
       rawErrorLeaked: thrown?.message?.includes('boom') ?? false,
     })
@@ -196,7 +196,7 @@ describe('[GOES Security FE] open redirect · ?redirect= guard', () => {
     )
 
     const safeTargets = ['/dashboard/maintainer', '/dashboard/category?x=1']
-    t.evidence('Input - candidate targets (safe)', { targets: safeTargets })
+    t.evidence('candidate targets (safe) (input)', { targets: safeTargets })
 
     t.step('Execute + Verify: isSiteRelative(t) must return true')
     const results = safeTargets.map((p) => ({
@@ -205,7 +205,7 @@ describe('[GOES Security FE] open redirect · ?redirect= guard', () => {
     }))
     for (const { accepted } of results) expect(accepted).toBe(true)
 
-    t.evidence('Output - guard decisions', { results })
+    t.evidence('guard decisions (output)', { results })
 
     await t.flush()
   })
@@ -233,7 +233,7 @@ describe('[GOES Security FE] open redirect · ?redirect= guard', () => {
       '',
       'dashboard/maintainer', // no leading slash
     ]
-    t.evidence('Input - attacker redirect payloads', {
+    t.evidence('attacker redirect payloads (input)', {
       payloads: attackerPayloads,
     })
 
@@ -246,7 +246,7 @@ describe('[GOES Security FE] open redirect · ?redirect= guard', () => {
     }))
     for (const { accepted } of results) expect(accepted).toBe(false)
 
-    t.evidence('Output - guard decisions', { results })
+    t.evidence('guard decisions (output)', { results })
 
     await t.flush()
   })
@@ -275,7 +275,7 @@ describe('[GOES Security FE] client storage audit · tokens never in Web Storage
     )
 
     const suspectKeys = ['accessToken', 'token', 'jwt', 'refreshToken', 'auth']
-    t.evidence('Input - storage keys scanned', { suspectKeys })
+    t.evidence('storage keys scanned (input)', { suspectKeys })
 
     t.step('Execute: read every suspect key from local + session storage')
     const snapshot: Record<string, string | null> = {}
@@ -290,7 +290,7 @@ describe('[GOES Security FE] client storage audit · tokens never in Web Storage
       expect(sessionStorage.getItem(key)).toBeNull()
     }
 
-    t.evidence('Output - defense result', {
+    t.evidence('defense result (output)', {
       snapshot,
       tokensInWebStorage: Object.values(snapshot).filter((v) => v !== null)
         .length,

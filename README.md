@@ -47,7 +47,7 @@ it('[R9] clearSession wipes accessToken, user, roles and timestamps', async () =
   const auth = useAuthStore()
   const authenticated = session()
   auth.setSession(authenticated)
-  t.evidence('Input - session before logout', {
+  t.evidence('Session before logout (input)', {
     accessToken: authenticated.accessToken,
     user: authenticated.user,
     isAuthenticated: auth.isAuthenticated,
@@ -61,7 +61,7 @@ it('[R9] clearSession wipes accessToken, user, roles and timestamps', async () =
   expect(auth.accessToken).toBeNull()
   // ... 4 more assertions
 
-  t.evidence('Output - store snapshot after clearSession', {
+  t.evidence('Store snapshot after clearSession (output)', {
     accessToken: auth.accessToken,
     user: auth.user,
     roles: auth.roles,

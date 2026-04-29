@@ -75,10 +75,10 @@ describe('[GOES Security FE] activity-tracker', () => {
     expect(afterSecond).toBe(afterFirst)
     spy.mockRestore()
 
-    t.evidence('Input - startActivityTracking invocations', {
+    t.evidence('startActivityTracking invocations (input)', {
       sequence: ['baseline', 'first', 'second'],
     })
-    t.evidence('Output - addEventListener call counts', {
+    t.evidence('addEventListener call counts (output)', {
       baseline,
       afterFirst,
       afterSecond,
@@ -108,8 +108,8 @@ describe('[GOES Security FE] activity-tracker', () => {
     t.step('Verify: elapsed is < 50ms')
     expect(ms).toBeLessThan(50)
 
-    t.evidence('Input - trigger', { action: 'markActivity()' })
-    t.evidence('Output - observed delay', {
+    t.evidence('trigger (input)', { action: 'markActivity()' })
+    t.evidence('observed delay (output)', {
       msSinceLastActivity: ms,
       toleranceMs: 50,
     })
@@ -141,7 +141,7 @@ describe('[GOES Security FE] session-scheduler', () => {
       accessExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
       idleExpiresAt: idleExp.toISOString(),
     }
-    t.evidence('Input - scheduleSessionTimers args', input)
+    t.evidence('scheduleSessionTimers args (input)', input)
 
     t.step('Execute: scheduleSessionTimers(input)')
     scheduleSessionTimers(input)
@@ -150,7 +150,7 @@ describe('[GOES Security FE] session-scheduler', () => {
     expect(idle.value.warning).toBe(false)
     expect(idle.value.deadlineMs).toBe(idleExp.getTime())
 
-    t.evidence('Output - idle ref snapshot', {
+    t.evidence('idle ref snapshot (output)', {
       warning: idle.value.warning,
       deadlineMs: idle.value.deadlineMs,
       expectedDeadlineMs: idleExp.getTime(),
@@ -180,7 +180,7 @@ describe('[GOES Security FE] session-scheduler', () => {
       accessExpiresAt: new Date(Date.now() + 15 * 60_000).toISOString(),
       idleExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     })
-    t.evidence('Input - stale timer setup', {
+    t.evidence('stale timer setup (input)', {
       idleWindowMs: 60_000,
       accessWindowMs: 15 * 60_000,
     })
@@ -192,7 +192,7 @@ describe('[GOES Security FE] session-scheduler', () => {
     t.step('Verify: idle.warning stayed false (nothing fired)')
     expect(idle.value.warning).toBe(false)
 
-    t.evidence('Output - post-cancel state after 2 minutes', {
+    t.evidence('post-cancel state after 2 minutes (output)', {
       warning: idle.value.warning,
       ghostLogoutFired: idle.value.warning,
     })
