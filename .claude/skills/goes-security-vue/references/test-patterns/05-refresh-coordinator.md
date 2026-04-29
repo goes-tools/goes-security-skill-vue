@@ -2,18 +2,20 @@
 
 **Covers:** `R32` · **OWASP:** A07 · **Severity:** blocker
 
-Centralised gatekeeper for token refresh. Three guarantees:
+Centralised gatekeeper for token refresh. Four guarantees:
 
-1. **Single-flight** — concurrent 401s share one `inFlight` refresh promise (no stampede).
-2. **Cooldown** — a successful refresh is cached for ~5s so the next 401 does NOT trigger another round-trip.
-3. **Max attempts** — bounded retry budget (`MAX_REFRESH_ATTEMPTS = 3`) so a crashing backend does not drag the client into a refresh loop.
-4. **`resetRefreshCoordinator()`** — wipes `inFlight` + `lastResult` on logout, preventing cross-session token reuse.
+1. **Single-flight** — concurrent 401s share one `inFlight` refresh promise.
+2. **Cooldown** — a successful refresh is cached for ~5s.
+3. **Max attempts** — bounded retry budget (`MAX_REFRESH_ATTEMPTS = 3`).
+4. **Reset on logout** — `resetRefreshCoordinator()` wipes `inFlight` + `lastResult`.
+
+Each test logs the cascade scenario in `Input -` and the actual call counts to the spied refresh adapter in `Output -`, so a regression in the single-flight or cooldown logic is immediately visible.
 
 ## Example spec — `tests/security/refresh-coordinator.security-html.spec.ts`
 
 ```typescript
 /**
- * Refresh Coordinator — 401 cascade protection
+ * Refresh Coordinator - 401 cascade protection
  * ─────────────────────────────────────────────
  * Centralised gatekeeper for token refresh. Three guarantees we
  * want pinned down:
@@ -58,21 +60,35 @@ describe('[GOES Security FE] refresh-coordinator', () => {
       '<p>If two requests fail 401 simultaneously the coordinator must ' +
         'fire a single POST /auth/refresh and share the promise with ' +
         'both callers, not two parallel refreshes. Prevents stampede ' +
-        'against the backend.</p>',
+        'against the backend.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/" target="_blank" rel="noopener">OWASP A07</a>.</p>',
     )
 
+    t.step('Prepare: spy on the refresh adapter')
     const refresh = vi.fn().mockResolvedValue(okResult)
     setRefreshAdapter({ refresh })
+    t.evidence('Input - attacker pattern simulated', {
+      scenario: 'three concurrent 401s from different axios requests',
+      okResult,
+    })
 
+    t.step('Execute: fire 3 parallel refreshAccessToken() calls')
     const [a, b, c] = await Promise.all([
       refreshAccessToken(),
       refreshAccessToken(),
       refreshAccessToken(),
     ])
 
+    t.step('Verify: one backend call, single shared promise')
     expect(a).toBe(b)
     expect(b).toBe(c)
     expect(refresh).toHaveBeenCalledTimes(1)
+
+    t.evidence('Output - defense result', {
+      adapterCalls: refresh.mock.calls.length,
+      sharedPromise: a === b && b === c,
+      backendSaved: 2,
+    })
 
     await t.flush()
   })
@@ -87,18 +103,33 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     t.descriptionHtml(
       '<p>After a successful refresh, if 50 requests cascade into 401s ' +
         '(e.g. the user agent has a bug and rejects the new token), the ' +
-        'coordinator does NOT fire 50 refreshes — it reuses the recent ' +
-        'result for 5 s and lets the interceptor fail cleanly.</p>',
+        'coordinator does NOT fire 50 refreshes - it reuses the recent ' +
+        'result for 5s and lets the interceptor fail cleanly.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/" target="_blank" rel="noopener">OWASP A07</a>.</p>',
     )
 
     const refresh = vi.fn().mockResolvedValue(okResult)
     setRefreshAdapter({ refresh })
 
-    await refreshAccessToken() // primes the cache
-    await refreshAccessToken() // should reuse
-    await refreshAccessToken() // should reuse
+    t.step('Prepare: prime the cache with one refresh')
+    await refreshAccessToken()
+    t.evidence('Input - cascade scenario simulated', {
+      warmups: 1,
+      subsequentCalls: 2,
+      cooldownMs: 5_000,
+    })
 
+    t.step('Execute: two immediate follow-up refreshAccessToken() calls')
+    await refreshAccessToken()
+    await refreshAccessToken()
+
+    t.step('Verify: only the first call hit the backend')
     expect(refresh).toHaveBeenCalledTimes(1)
+
+    t.evidence('Output - defense result', {
+      adapterCalls: refresh.mock.calls.length,
+      reusedFromCooldown: 2,
+    })
 
     await t.flush()
   })
@@ -112,18 +143,36 @@ describe('[GOES Security FE] refresh-coordinator', () => {
     t.tag('Pentest', 'OWASP-A07', 'GOES-R32')
     t.descriptionHtml(
       '<p>When the user logs out the coordinator cache must be cleared. ' +
-        'Otherwise an immediate re-login could reuse the previous ' +
-        "user's token (cross-session token reuse).</p>",
+        "Otherwise an immediate re-login could reuse the previous user's " +
+        'token (cross-session token reuse).</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/" target="_blank" rel="noopener">OWASP A07</a>.</p>',
     )
 
     const refresh = vi.fn().mockResolvedValue(okResult)
     setRefreshAdapter({ refresh })
 
+    t.step('Prepare: one pre-logout refresh (cache populated)')
     await refreshAccessToken()
+    const beforeReset = refresh.mock.calls.length
+
+    t.step('Execute: reset + one more refresh (simulates re-login)')
     resetRefreshCoordinator()
     await refreshAccessToken()
+    const afterReset = refresh.mock.calls.length
 
-    expect(refresh).toHaveBeenCalledTimes(2)
+    t.step(
+      'Verify: the adapter was invoked twice (reset bypassed the cooldown)',
+    )
+    expect(afterReset).toBe(2)
+
+    t.evidence('Input - sequence', {
+      order: ['refresh', 'resetRefreshCoordinator', 'refresh'],
+    })
+    t.evidence('Output - defense result', {
+      callsBeforeReset: beforeReset,
+      callsAfterReset: afterReset,
+      crossSessionReuseBlocked: afterReset === 2,
+    })
 
     await t.flush()
   })
@@ -139,21 +188,35 @@ describe('[GOES Security FE] refresh-coordinator', () => {
       '<p>If the backend errors on refresh, the coordinator retries up ' +
         'to <strong>MAX_REFRESH_ATTEMPTS=3</strong> times and then ' +
         'gives up. Without this cap a failing backend would drag the ' +
-        'client into a refresh loop.</p>',
+        'client into a refresh loop.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/" target="_blank" rel="noopener">OWASP A07</a>.</p>',
     )
 
     const refresh = vi.fn().mockRejectedValue(new Error('boom'))
     setRefreshAdapter({ refresh })
+    t.evidence('Input - failing backend', {
+      adapterMockedTo: 'reject with Error("boom") every call',
+      expectedMaxAttempts: MAX_REFRESH_ATTEMPTS,
+    })
 
+    t.step('Execute: call refreshAccessToken() and expect rejection')
     await expect(refreshAccessToken()).rejects.toThrow()
+
+    t.step('Verify: the adapter was invoked exactly MAX_REFRESH_ATTEMPTS times')
     expect(refresh).toHaveBeenCalledTimes(MAX_REFRESH_ATTEMPTS)
+
+    t.evidence('Output - defense result', {
+      adapterCalls: refresh.mock.calls.length,
+      capEnforced: refresh.mock.calls.length === MAX_REFRESH_ATTEMPTS,
+      loopPrevented: true,
+    })
 
     await t.flush()
   }, 10_000)
 })
 ```
 
-## Adapt
+## Adapt to your project
 
 - Replace `@/lib/api/refresh-coordinator` + `@/lib/api/refresh-adapter` with actual paths.
 - If the project does not use an adapter pattern, mock `axios.post('/auth/refresh', ...)` directly.

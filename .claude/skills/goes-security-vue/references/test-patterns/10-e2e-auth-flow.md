@@ -53,9 +53,7 @@ test.describe('[GOES Security FE · E2E] auth flow', () => {
     // The service normalises any 401 to the same copy regardless
     // of whether the email exists. We match on the literal to make
     // an accidental regression visible in the failure diff.
-    await expect(
-      page.getByText(/credenciales invalidas/i),
-    ).toBeVisible()
+    await expect(page.getByText(/credenciales invalidas/i)).toBeVisible()
     // We must NOT have navigated away.
     await expect(page).toHaveURL(/\/login/)
   })
@@ -116,10 +114,8 @@ test.describe('[GOES Security FE · E2E] auth flow', () => {
 })
 ```
 
-If the import fails because the file does not exist: see `helpers.ts` in `_playwright-setup.md` and port it alongside this spec.
-
 ## Adapt
 
-- Update `CREDENTIALS` with the seeded users of your backend.
+- Update `CREDENTIALS` with the seeded users of your backend (see the BE README — typically `admin@<domain>.gob.sv`, `tecnico@<domain>.gob.sv`, `consulta@<domain>.gob.sv`).
 - Adjust label selectors (`/correo/i`, `/contrase/i`, `/entrar/i`) to match your real UI copy — these MUST stay in the project language because they target real DOM text.
 - If your login route is at `/signin` instead of `/login`, update the URL regex.

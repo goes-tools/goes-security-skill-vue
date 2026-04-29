@@ -2,21 +2,19 @@
 
 **Covers:** `R5`, `R11`, `VF1` · **OWASP:** A03 · **Severity:** blocker
 
-Defence-in-depth: the backend strips unsafe markup, AND the frontend rejects it before the network round-trip so the user sees a quick, specific error — and if the backend filter ever fails, the XSS still never reaches the DOM.
-
-The helper `containsUnsafeHtml` covers three vectors:
+Defence-in-depth: the backend strips unsafe markup, AND the frontend rejects it before the network round-trip. The helper `containsUnsafeHtml` covers three vectors:
 
 - HTML tags: `<script>`, `<img>`, `<iframe>`, comments
 - Inline event handlers: `onclick=`, `onerror=`, `onload=`, etc.
 - Script-capable URL schemes: `javascript:`, `vbscript:`, `data:text/html`
 
-Plus `firstUnsafeKey(obj)` returns a dotted path of the offending field so the form can highlight it precisely.
+Plus `firstUnsafeKey(obj)` returns a dotted path of the offending field so the form can highlight it precisely. Every payload tested gets logged as `Input - attacker payloads`, the regex decisions are captured in `Output - defense result`.
 
 ## Example spec — `tests/security/sanitize.security-html.spec.ts`
 
 ```typescript
 /**
- * Client-side XSS Prevention — sanitize.ts
+ * Client-side XSS Prevention - sanitize.ts
  * ─────────────────────────────────────────
  * The app ships defence-in-depth: the backend interceptor strips
  * unsafe markup, and the frontend rejects it client-side before
@@ -24,8 +22,7 @@ Plus `firstUnsafeKey(obj)` returns a dotted path of the offending field so the f
  *
  * These tests pin down the three regex vectors used by
  * `containsUnsafeHtml` + the traversal behaviour of
- * `firstUnsafeKey`. They guard against regressions like "devs
- * relaxed the tag regex and now <img onerror> slips through".
+ * `firstUnsafeKey`.
  */
 import { describe, expect, it } from 'vitest'
 import { report } from '@security-reporter/metadata'
@@ -45,14 +42,33 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     t.tag('Pentest', 'OWASP-A03', 'GOES-R11')
     t.descriptionHtml(
       '<p>Opening or closing HTML tags are rejected before submit to ' +
-        'prevent reflected and stored XSS in case the backend ' +
-        'interceptor ever fails (defence in depth).</p>',
+        'prevent reflected and stored XSS in case the backend interceptor ' +
+        'ever fails (defence in depth).</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A03_2021-Injection/" target="_blank" rel="noopener">OWASP A03</a>.</p>',
     )
 
-    expect(containsUnsafeHtml('<script>alert(1)</script>')).toBe(true)
-    expect(containsUnsafeHtml('<img src=x>')).toBe(true)
-    expect(containsUnsafeHtml('<iframe src="//evil"></iframe>')).toBe(true)
-    expect(containsUnsafeHtml('<!-- comment -->')).toBe(true)
+    const payloads = [
+      '<script>alert(1)</script>',
+      '<img src=x>',
+      '<iframe src="//evil"></iframe>',
+      '<!-- comment -->',
+    ]
+    t.evidence('Input - attacker payloads', { payloads })
+
+    t.step('Execute: run each payload through containsUnsafeHtml')
+    const results = payloads.map((p) => ({
+      payload: p,
+      rejected: containsUnsafeHtml(p),
+    }))
+
+    t.step('Verify: every payload is rejected')
+    for (const { payload } of results)
+      expect(containsUnsafeHtml(payload)).toBe(true)
+
+    t.evidence('Output - defense result', {
+      allRejected: results.every((r) => r.rejected),
+      breakdown: results,
+    })
 
     await t.flush()
   })
@@ -66,24 +82,34 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     t.tag('Pentest', 'OWASP-A03', 'GOES-R11')
     t.descriptionHtml(
       '<p>Strings such as <code>onclick="x"</code> or ' +
-        '<code>onerror=\'alert(1)\'</code> are caught by the event ' +
-        'handler regex and blocked.</p>',
+        "<code>onerror='alert(1)'</code> are caught by the event " +
+        'handler regex and blocked.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A03_2021-Injection/" target="_blank" rel="noopener">OWASP A03</a>.</p>',
     )
 
-    // The regex requires a leading whitespace before `on*` to avoid
-    // false positives on words like "onion" or "button". These are
-    // the realistic shapes attackers use (inside a tag or after an
-    // opening quote).
-    expect(containsUnsafeHtml(' onclick="do()"')).toBe(true)
-    expect(containsUnsafeHtml(" onerror='alert(1)'")).toBe(true)
-    expect(containsUnsafeHtml(' onload=boom')).toBe(true)
-    expect(containsUnsafeHtml(' onmouseover = "x"')).toBe(true)
-    // Inside a tag, TAG_REGEX already catches it — guard against
-    // a plain `onclick` without whitespace not triggering the
-    // handler regex alone.
-    expect(containsUnsafeHtml('<a onclick="do()">x</a>')).toBe(true)
-    // Sanity: the word "button" alone must NOT trigger.
-    expect(containsUnsafeHtml('button pressed')).toBe(false)
+    const payloads = [
+      ' onclick="do()"',
+      " onerror='alert(1)'",
+      ' onload=boom',
+      ' onmouseover = "x"',
+      '<a onclick="do()">x</a>',
+    ]
+    t.evidence('Input - attacker payloads', {
+      payloads,
+      note: 'leading whitespace required by the regex to avoid false positives on words like "button"',
+    })
+
+    t.step('Execute + Verify: every handler payload flagged')
+    for (const p of payloads) expect(containsUnsafeHtml(p)).toBe(true)
+
+    t.step('Verify: the word "button pressed" is NOT flagged (sanity)')
+    const benign = containsUnsafeHtml('button pressed')
+    expect(benign).toBe(false)
+
+    t.evidence('Output - defense result', {
+      payloadsBlocked: payloads.length,
+      benignFalsePositiveCheck: benign === false ? 'passed' : 'FAILED',
+    })
 
     await t.flush()
   })
@@ -95,11 +121,26 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     t.story('Script schemes rejected')
     t.severity('critical')
     t.tag('Pentest', 'OWASP-A03', 'GOES-R11')
+    t.descriptionHtml(
+      '<p>Protocol schemes capable of executing script must be blocked ' +
+        'regardless of context.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A03_2021-Injection/" target="_blank" rel="noopener">OWASP A03</a>.</p>',
+    )
 
-    expect(containsUnsafeHtml('javascript:alert(1)')).toBe(true)
-    expect(containsUnsafeHtml('JavaScript:alert(1)')).toBe(true)
-    expect(containsUnsafeHtml('vbscript:msgbox(1)')).toBe(true)
-    expect(containsUnsafeHtml('data:text/html,<script>')).toBe(true)
+    const payloads = [
+      'javascript:alert(1)',
+      'JavaScript:alert(1)',
+      'vbscript:msgbox(1)',
+      'data:text/html,<script>',
+    ]
+    t.evidence('Input - attacker payloads', { payloads })
+
+    t.step('Execute + Verify: every scheme payload flagged')
+    for (const p of payloads) expect(containsUnsafeHtml(p)).toBe(true)
+
+    t.evidence('Output - defense result', {
+      payloadsBlocked: payloads.length,
+    })
 
     await t.flush()
   })
@@ -113,16 +154,21 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     t.tag('Pentest', 'OWASP-A03', 'GOES-R11')
     t.descriptionHtml(
       '<p>Writing <code>a<b</code> or <code>x > 5</code> in a free-text ' +
-        'observation must pass through — it is not an XSS vector and ' +
-        'false-positives on these degrade the UX.</p>',
+        'observation must pass through - it is not an XSS vector and ' +
+        'false-positives on these degrade the UX.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A03_2021-Injection/" target="_blank" rel="noopener">OWASP A03</a>.</p>',
     )
 
-    expect(containsUnsafeHtml('a<b')).toBe(false)
-    expect(containsUnsafeHtml('x > 5')).toBe(false)
-    expect(containsUnsafeHtml('< 5 rows')).toBe(false)
-    expect(containsUnsafeHtml('')).toBe(false)
-    expect(containsUnsafeHtml(null)).toBe(false)
-    expect(containsUnsafeHtml(undefined)).toBe(false)
+    const inputs = ['a<b', 'x > 5', '< 5 rows', '', null, undefined]
+    t.evidence('Input - benign comparison/null variants', { inputs })
+
+    t.step('Execute + Verify: every benign input must be accepted')
+    for (const v of inputs) expect(containsUnsafeHtml(v as string)).toBe(false)
+
+    t.evidence('Output - defense result', {
+      falsePositives: 0,
+      inputsTested: inputs.length,
+    })
 
     await t.flush()
   })
@@ -137,21 +183,36 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     t.descriptionHtml(
       '<p>The form tells the user exactly which field contains the ' +
         'invalid payload. Nested objects are reported with dotted ' +
-        'notation (<code>migration.observations</code>).</p>',
+        'notation (<code>migration.observations</code>).</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A03_2021-Injection/" target="_blank" rel="noopener">OWASP A03</a>.</p>',
     )
 
-    expect(
-      firstUnsafeKey({ name: 'SIGES', description: '<script>x</script>' }),
-    ).toBe('description')
+    t.step('Prepare: three payloads — flat, nested, clean')
+    const flatPayload = { name: 'SIGES', description: '<script>x</script>' }
+    const nestedPayload = {
+      system: { code: 'OK' },
+      migration: { observations: '<img onerror=1>' },
+    }
+    const cleanPayload = { name: 'ok', description: 'x > 5' }
+    t.evidence('Input - payloads', { flatPayload, nestedPayload, cleanPayload })
 
-    expect(
-      firstUnsafeKey({
-        system: { code: 'OK' },
-        migration: { observations: '<img onerror=1>' },
-      }),
-    ).toBe('migration.observations')
+    t.step('Execute: firstUnsafeKey on each')
+    const flatResult = firstUnsafeKey(flatPayload)
+    const nestedResult = firstUnsafeKey(nestedPayload)
+    const cleanResult = firstUnsafeKey(cleanPayload)
 
-    expect(firstUnsafeKey({ name: 'ok', description: 'x > 5' })).toBeNull()
+    t.step(
+      'Verify: dotted path is returned for offending fields; null for clean',
+    )
+    expect(flatResult).toBe('description')
+    expect(nestedResult).toBe('migration.observations')
+    expect(cleanResult).toBeNull()
+
+    t.evidence('Output - firstUnsafeKey results', {
+      flat: flatResult,
+      nested: nestedResult,
+      clean: cleanResult,
+    })
 
     await t.flush()
   })
@@ -164,20 +225,33 @@ describe('[GOES Security FE] sanitize.ts · Client-side XSS guard', () => {
     t.severity('high')
     t.tag('Pentest', 'OWASP-A05', 'GOES-R8')
     t.descriptionHtml(
-      '<p>The validation message is generic. Saying ' +
-        '"contains HTML/scripts" would tell an attacker the exact ' +
-        'pattern being checked, so we avoid it.</p>',
+      '<p>The validation message is generic. Saying "contains HTML/scripts" ' +
+        'would tell an attacker the exact pattern being checked, so we avoid it.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A05_2021-Security_Misconfiguration/" target="_blank" rel="noopener">OWASP A05</a>.</p>',
     )
 
+    t.evidence('Input - copy under audit', {
+      message: INVALID_INPUT_MESSAGE,
+      forbiddenTokens: ['html', 'script', 'tag', 'regex'],
+    })
+
+    t.step('Verify: message is non-empty AND contains no detection hints')
     expect(INVALID_INPUT_MESSAGE).not.toMatch(/html|script|tag|regex/i)
     expect(INVALID_INPUT_MESSAGE.length).toBeGreaterThan(0)
+
+    t.evidence('Output - defense result', {
+      messageLength: INVALID_INPUT_MESSAGE.length,
+      leaksDetectionSurface: /html|script|tag|regex/i.test(
+        INVALID_INPUT_MESSAGE,
+      ),
+    })
 
     await t.flush()
   })
 })
 ```
 
-## Adapt
+## Adapt to your project
 
 - Replace `@/shared/utils/sanitize` with your project's sanitizer helper.
 - If your project uses DOMPurify, add extra assertions that the sanitized output is what you expect (not just a pass/fail boolean).

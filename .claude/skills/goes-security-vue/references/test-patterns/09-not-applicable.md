@@ -4,6 +4,8 @@
 
 Auditors need to see the full control surface and confirm that out-of-scope items were **considered** — never silently missed. This spec documents each control that lives server-side (or is out of scope for product reasons) with its reason and the attack vector it would mitigate if it applied. Entries tagged `N/A` get classified into the "No aplicables" bucket of the HTML report and the Excel workbook.
 
+Each entry's metadata is captured as `Evidence — scope exclusion` with the `control`, `status: "NOT_APPLICABLE"`, `reason`, `mitigatedVector`, and the full OWASP reference URL — so the auditor can copy/paste each row directly into the regulatory annex.
+
 Typical server-side items to document as N/A for a pure SPA:
 
 - Password hashing (`R15`)
@@ -66,7 +68,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     control: 'GOES-R16',
     title: 'JWT RS256 asymmetric signing',
     reason:
-      'Token signing is the backend\'s job. The SPA only receives the signed token and forwards it in the Authorization header.',
+      "Token signing is the backend's job. The SPA only receives the signed token and forwards it in the Authorization header.",
     mitigatedVector:
       'Token forgery, algorithm-confusion attacks (HS256 with public key as secret).',
     owasp: 'OWASP A02:2021 — Cryptographic Failures',
@@ -76,8 +78,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'Refresh token entropy (UUID v4 / 128+ bits)',
     reason:
       'Refresh tokens are generated server-side and travel in an httpOnly cookie the SPA cannot read. Entropy is a backend invariant.',
-    mitigatedVector:
-      'Brute-force guessing of refresh tokens, token collision.',
+    mitigatedVector: 'Brute-force guessing of refresh tokens, token collision.',
     owasp: 'OWASP A02:2021 — Cryptographic Failures',
   },
   {
@@ -85,8 +86,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'Brute-force lockout after N failed logins',
     reason:
       'Account lockout lives in the backend login handler. The SPA has no visibility of the failed-attempt counter.',
-    mitigatedVector:
-      'Credential-stuffing attacks, online brute-force.',
+    mitigatedVector: 'Credential-stuffing attacks, online brute-force.',
     owasp: 'OWASP A07:2021 — Identification and Authentication Failures',
   },
   {
@@ -94,8 +94,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'Rate limiting (per IP + per endpoint)',
     reason:
       'Rate limits are enforced by the NestJS Throttler on the backend. The SPA cannot throttle its own users reliably because anyone can bypass it.',
-    mitigatedVector:
-      'DoS via burst requests, login flooding.',
+    mitigatedVector: 'DoS via burst requests, login flooding.',
     owasp: 'OWASP A04:2021 — Insecure Design',
   },
   {
@@ -103,8 +102,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'SQL / NoSQL injection',
     reason:
       'All database access goes through Prisma on the backend. The frontend never builds SQL and cannot trigger injection.',
-    mitigatedVector:
-      'Arbitrary query execution against the database.',
+    mitigatedVector: 'Arbitrary query execution against the database.',
     owasp: 'OWASP A03:2021 — Injection',
   },
   {
@@ -130,8 +128,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'Data-at-rest encryption of sensitive columns',
     reason:
       'Encryption at rest is a database-level concern (TDE / column encryption on the PostgreSQL server). The SPA does not own storage.',
-    mitigatedVector:
-      'Disk theft / DB snapshot leak exposing plaintext data.',
+    mitigatedVector: 'Disk theft / DB snapshot leak exposing plaintext data.',
     owasp: 'OWASP A02:2021 — Cryptographic Failures',
   },
   {
@@ -148,8 +145,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'Inbound webhook signature verification',
     reason:
       'No inbound webhooks exist in this product (verified by searching POST handlers in the backend).',
-    mitigatedVector:
-      'Spoofed third-party callbacks (Stripe, GitHub, etc.).',
+    mitigatedVector: 'Spoofed third-party callbacks (Stripe, GitHub, etc.).',
     owasp: 'OWASP A08:2021 — Software and Data Integrity Failures',
   },
   {
@@ -157,8 +153,7 @@ const NOT_APPLICABLE: NaEntry[] = [
     title: 'Cardholder / payment data handling',
     reason:
       'The app does not process payments or store card data. No `card`, `payment`, `stripe`, `iban` in the codebase.',
-    mitigatedVector:
-      'PCI data exfiltration, PAN leakage.',
+    mitigatedVector: 'PCI data exfiltration, PAN leakage.',
     owasp: 'PCI-DSS v4.0',
   },
 ]
@@ -178,6 +173,19 @@ describe('[Scope boundaries FE] Server-side controls NOT applicable to the front
       t.suite('Scope boundaries')
       t.parentSuite('Security Controls')
 
+      // Map the owasp string onto the OWASP Top 10 2021 canonical URL.
+      const owaspMatch = entry.owasp.match(/A(0[1-9]|10)/)
+      const owaspUrl = owaspMatch
+        ? 'https://owasp.org/Top10/A' + owaspMatch[1] + '_2021/'
+        : entry.owasp
+      const owaspRef = owaspMatch
+        ? '<a href="' +
+          owaspUrl +
+          '" target="_blank" rel="noopener">' +
+          entry.owasp +
+          '</a>'
+        : entry.owasp
+
       t.descriptionHtml(
         '<h4>Not applicable · ' +
           entry.control +
@@ -192,7 +200,7 @@ describe('[Scope boundaries FE] Server-side controls NOT applicable to the front
           entry.mitigatedVector +
           '</p>' +
           '<p><strong>Reference:</strong> ' +
-          entry.owasp +
+          owaspRef +
           '</p>' +
           '<p class="hint"><em>If the frontend ever absorbs this ' +
           'responsibility (e.g. client-side crypto, uploads), remove ' +

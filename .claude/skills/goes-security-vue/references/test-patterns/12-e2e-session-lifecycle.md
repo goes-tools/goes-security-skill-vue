@@ -5,7 +5,7 @@
 Two ends of the session story:
 
 1. Unauthenticated visit of a private URL redirects to `/login?redirect=<original>` with the path URL-encoded.
-2. Logout invalidates the refresh cookie **server-side** — a subsequent visit to a private URL must NOT resurrect the session. This specifically catches the bug where the Pinia state is cleared but the httpOnly cookie still works (interceptor silently re-auths).
+2. Logout invalidates the refresh cookie **server-side** — a subsequent visit to a private URL must NOT resurrect the session. This catches the bug where the Pinia state is cleared but the httpOnly cookie still works (interceptor silently re-auths).
 
 ## Example spec — `tests/e2e/session.security.spec.ts`
 
@@ -39,9 +39,7 @@ test.describe('[GOES Security FE · E2E] session lifecycle', () => {
     page,
   }) => {
     await page.goto('/dashboard/category')
-    await expect(page).toHaveURL(
-      /\/login\?redirect=.*%2Fdashboard%2Fcategory/,
-    )
+    await expect(page).toHaveURL(/\/login\?redirect=.*%2Fdashboard%2Fcategory/)
   })
 
   test('[R40] logout invalidates the refresh cookie server-side (no resurrection)', async ({
@@ -91,3 +89,7 @@ test.describe('[GOES Security FE · E2E] session lifecycle', () => {
 - If the logout button has different copy, update the `name:` regex.
 - If the route chain after logout is `/auth/login` instead of `/login`, update the URL regex.
 - If the project does NOT use an httpOnly refresh cookie (pure bearer-only) then the "no resurrection" assertion becomes trivial — document it via an N/A entry instead.
+
+## Backend logout contract
+
+Note: `POST /auth/logout` in the GOES backend is intentionally **public** (no JWT required) so a user with an expired access token can still log out cleanly. The handler clears the refresh cookie server-side regardless of the access-token state. If your backend exposes a different contract (returns 401 without token), update the BE-side test accordingly — but the SPA-side flow is identical.

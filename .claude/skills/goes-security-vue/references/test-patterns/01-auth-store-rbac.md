@@ -8,11 +8,13 @@ The Pinia auth store is the client-side identity surface. Three invariants prote
 2. `hasRole()` / `hasAnyRole()` use **strict equality** — no prefix / case-insensitive matches.
 3. `can()` derives from the **PERMISOS map** (administrador / tecnico / usuario), never from a free-form role string. Unknown perfiles fall back to `usuario` (fail-closed).
 
+Each test ships `t.evidence('Input - …')` (the attacker tampering attempt) and `t.evidence('Output - …')` (the store state after the action) so the HTML report shows exactly what was tried and how the defence reacted.
+
 ## Example spec — `tests/security/auth-store.security-html.spec.ts`
 
 ```typescript
 /**
- * Auth Store — session invariants
+ * Auth Store - session invariants
  * ────────────────────────────────
  * The store is the client-side identity surface. These tests pin
  * down the three behaviours that break if tampered with:
@@ -22,7 +24,7 @@ The Pinia auth store is the client-side identity surface. Three invariants prote
  *   · hasRole / hasAnyRole enforces exact-match RBAC (no prefix
  *     / case-insensitive matches sneaking in).
  *   · can() derives from the PERMISOS matrix (administrador /
- *     tecnico / usuario) — never from the role string directly.
+ *     tecnico / usuario) - never from the role string directly.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
@@ -30,13 +32,10 @@ import { report } from '@security-reporter/metadata'
 import { useAuthStore } from '@/features/auth/stores/auth.store'
 import type { AuthSession, AuthUser } from '@/features/auth/types'
 
-// Every test drops into a fresh Pinia so state does not leak.
 beforeEach(() => {
   setActivePinia(createPinia())
 })
 
-// The scheduler + activity tracker are wired into setSession as
-// global side-effects; stub them so we're testing state only.
 vi.mock('@/lib/api/session-scheduler', () => ({
   scheduleSessionTimers: vi.fn(),
   cancelSessionTimers: vi.fn(),
@@ -81,24 +80,45 @@ describe('[GOES Security FE] auth.store', () => {
     t.severity('critical')
     t.tag('Pentest', 'OWASP-A07', 'GOES-R9')
     t.descriptionHtml(
-      '<p>A logout must leave the store identical to its initial ' +
-        'state. If anything survives (in-memory token, user, roles, ' +
-        'expiration timestamps), a component mounted after logout ' +
-        'could render data from the previous user.</p>',
+      '<p>A logout must leave the store identical to its initial state. ' +
+        'If anything survives (in-memory token, user, roles, expiration ' +
+        'timestamps), a component mounted after logout could render data ' +
+        'from the previous user.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/" target="_blank" rel="noopener">OWASP A07</a>.</p>',
     )
 
+    t.step('Prepare: populate the store with a fully authenticated session')
     const auth = useAuthStore()
-    auth.setSession(session())
+    const authenticated = session()
+    auth.setSession(authenticated)
+    t.evidence('Input - session before logout', {
+      accessToken: authenticated.accessToken,
+      user: authenticated.user,
+      accessExpiresAt: authenticated.accessExpiresAt,
+      idleExpiresAt: authenticated.idleExpiresAt,
+      isAuthenticated: auth.isAuthenticated,
+    })
     expect(auth.isAuthenticated).toBe(true)
 
+    t.step('Execute: call auth.clearSession()')
     auth.clearSession()
 
+    t.step('Verify: every sensitive slot is back to its initial value')
     expect(auth.isAuthenticated).toBe(false)
     expect(auth.accessToken).toBeNull()
     expect(auth.user).toBeNull()
     expect(auth.roles).toEqual([])
     expect(auth.accessExpiresAt).toBeNull()
     expect(auth.idleExpiresAt).toBeNull()
+
+    t.evidence('Output - store snapshot after clearSession', {
+      accessToken: auth.accessToken,
+      user: auth.user,
+      roles: auth.roles,
+      accessExpiresAt: auth.accessExpiresAt,
+      idleExpiresAt: auth.idleExpiresAt,
+      isAuthenticated: auth.isAuthenticated,
+    })
 
     await t.flush()
   })
@@ -114,20 +134,38 @@ describe('[GOES Security FE] auth.store', () => {
       '<p>If <code>hasRole("admin")</code> also matched "Admin" or ' +
         '"admins" an attacker could elevate privileges by writing the ' +
         'role with a different capitalisation into the JWT. The guard ' +
-        'must use strict equality.</p>',
+        'must use strict equality.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A01_2021-Broken_Access_Control/" target="_blank" rel="noopener">OWASP A01</a>.</p>',
     )
 
+    t.step('Prepare: authenticate as admin (roles: ["admin"])')
     const auth = useAuthStore()
     auth.setSession(session({ user: user({ roles: ['admin'] }) }))
+    t.evidence('Input - attacker role-tampering candidates', {
+      legitimate: 'admin',
+      payloads: ['Admin', 'ADMIN', 'admins', 'usuario'],
+    })
 
+    t.step('Execute + Verify: each tampered variant must NOT satisfy hasRole()')
     expect(auth.hasRole('admin')).toBe(true)
-    // @ts-expect-error — we pass strings that are NOT in the Role type on purpose.
+    // @ts-expect-error - wrong-case role, not in the Role union.
     expect(auth.hasRole('Admin')).toBe(false)
-    // @ts-expect-error
+    // @ts-expect-error - uppercase role, not in the Role union.
     expect(auth.hasRole('ADMIN')).toBe(false)
-    // @ts-expect-error
+    // @ts-expect-error - plural form, not in the Role union.
     expect(auth.hasRole('admins')).toBe(false)
     expect(auth.hasRole('usuario')).toBe(false)
+
+    t.evidence('Output - hasRole decisions per payload', {
+      admin: auth.hasRole('admin'),
+      // @ts-expect-error - intentional
+      Admin: auth.hasRole('Admin'),
+      // @ts-expect-error - intentional
+      ADMIN: auth.hasRole('ADMIN'),
+      // @ts-expect-error - intentional
+      admins: auth.hasRole('admins'),
+      usuario: auth.hasRole('usuario'),
+    })
 
     await t.flush()
   })
@@ -139,14 +177,38 @@ describe('[GOES Security FE] auth.store', () => {
     t.story('hasAnyRole strict intersection')
     t.severity('high')
     t.tag('Pentest', 'OWASP-A01', 'GOES-R9')
+    t.descriptionHtml(
+      '<p>Intersection semantics: at least one role must match. Empty ' +
+        'required list is treated as "public" by design.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A01_2021-Broken_Access_Control/" target="_blank" rel="noopener">OWASP A01</a>.</p>',
+    )
 
+    t.step('Prepare: authenticate as usuario (roles: ["usuario"])')
     const auth = useAuthStore()
     auth.setSession(session({ user: user({ roles: ['usuario'] }) }))
 
-    expect(auth.hasAnyRole(['admin', 'tecnico'])).toBe(false)
-    expect(auth.hasAnyRole(['usuario', 'admin'])).toBe(true)
-    // Empty required list is treated as "public" — documented behaviour.
-    expect(auth.hasAnyRole([])).toBe(true)
+    t.step('Execute + Verify: 3 intersection scenarios')
+    const disjoint = auth.hasAnyRole(['admin', 'tecnico'])
+    const overlap = auth.hasAnyRole(['usuario', 'admin'])
+    const empty = auth.hasAnyRole([])
+
+    expect(disjoint).toBe(false)
+    expect(overlap).toBe(true)
+    expect(empty).toBe(true)
+
+    t.evidence('Input - required-role sets tested', {
+      userRoles: ['usuario'],
+      scenarios: {
+        disjoint: ['admin', 'tecnico'],
+        overlap: ['usuario', 'admin'],
+        empty: [],
+      },
+    })
+    t.evidence('Output - hasAnyRole() per scenario', {
+      disjoint,
+      overlap,
+      empty_means_public: empty,
+    })
 
     await t.flush()
   })
@@ -163,25 +225,56 @@ describe('[GOES Security FE] auth.store', () => {
         '<code>perfil</code> (administrador / tecnico / usuario), not ' +
         'the free-form <code>rol</code> string. This way a backend ' +
         'that introduces a new experimental role does not grant ' +
-        'capabilities until we also extend the map.</p>',
+        'capabilities until we also extend the map.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A01_2021-Broken_Access_Control/" target="_blank" rel="noopener">OWASP A01</a>.</p>',
     )
 
     const auth = useAuthStore()
 
+    t.step('Prepare/Execute/Verify: administrador has eliminar + verMantenedor')
     auth.setSession(session({ user: user({ perfil: 'administrador' }) }))
-    expect(auth.can('eliminar')).toBe(true)
-    expect(auth.can('verMantenedor')).toBe(true)
+    const admin = {
+      eliminar: auth.can('eliminar'),
+      verMantenedor: auth.can('verMantenedor'),
+    }
+    expect(admin.eliminar).toBe(true)
+    expect(admin.verMantenedor).toBe(true)
 
+    t.step(
+      'Prepare/Execute/Verify: tecnico can edit but NOT delete / NOT maintainer',
+    )
     auth.setSession(session({ user: user({ perfil: 'tecnico' }) }))
-    expect(auth.can('eliminar')).toBe(false)
-    expect(auth.can('verMantenedor')).toBe(false)
-    expect(auth.can('editar')).toBe(true)
+    const tec = {
+      eliminar: auth.can('eliminar'),
+      verMantenedor: auth.can('verMantenedor'),
+      editar: auth.can('editar'),
+    }
+    expect(tec.eliminar).toBe(false)
+    expect(tec.verMantenedor).toBe(false)
+    expect(tec.editar).toBe(true)
 
+    t.step('Prepare/Execute/Verify: usuario is read-only across the board')
     auth.setSession(session({ user: user({ perfil: 'usuario' }) }))
-    expect(auth.can('eliminar')).toBe(false)
-    expect(auth.can('editar')).toBe(false)
-    expect(auth.can('agregar')).toBe(false)
-    expect(auth.can('verMantenedor')).toBe(false)
+    const usr = {
+      eliminar: auth.can('eliminar'),
+      editar: auth.can('editar'),
+      agregar: auth.can('agregar'),
+      verMantenedor: auth.can('verMantenedor'),
+    }
+    expect(usr.eliminar).toBe(false)
+    expect(usr.editar).toBe(false)
+    expect(usr.agregar).toBe(false)
+    expect(usr.verMantenedor).toBe(false)
+
+    t.evidence('Input - perfiles tested', {
+      perfiles: ['administrador', 'tecnico', 'usuario'],
+      flags: ['eliminar', 'editar', 'agregar', 'verMantenedor'],
+    })
+    t.evidence('Output - permissions matrix cells derived from can()', {
+      administrador: admin,
+      tecnico: tec,
+      usuario: usr,
+    })
 
     await t.flush()
   })
@@ -196,16 +289,31 @@ describe('[GOES Security FE] auth.store', () => {
     t.descriptionHtml(
       '<p>If the backend returns a perfil the FE does not know about ' +
         '(version mismatch, typo) the default must be the least ' +
-        'privileged one. Never fail-open.</p>',
+        'privileged one. Never fail-open.</p>' +
+        '<p><strong>Reference:</strong> <a href="https://owasp.org/Top10/A01_2021-Broken_Access_Control/" target="_blank" rel="noopener">OWASP A01</a>.</p>',
     )
 
+    t.step('Prepare: authenticate with a perfil unknown to the FE (supervisor)')
     const auth = useAuthStore()
     auth.setSession(session({ user: user({ perfil: 'supervisor' }) }))
+    t.evidence('Input - attacker payload', {
+      injectedPerfil: 'supervisor',
+      attackerGoal: 'fail-open to admin-grade permissions',
+    })
 
-    expect(auth.can('eliminar')).toBe(false)
-    expect(auth.can('agregar')).toBe(false)
-    expect(auth.can('editar')).toBe(false)
-    expect(auth.can('verMantenedor')).toBe(false)
+    t.step('Execute + Verify: every privileged flag must be denied')
+    const decisions = {
+      eliminar: auth.can('eliminar'),
+      agregar: auth.can('agregar'),
+      editar: auth.can('editar'),
+      verMantenedor: auth.can('verMantenedor'),
+    }
+    expect(decisions.eliminar).toBe(false)
+    expect(decisions.agregar).toBe(false)
+    expect(decisions.editar).toBe(false)
+    expect(decisions.verMantenedor).toBe(false)
+
+    t.evidence('Output - fallback permissions (must equal usuario)', decisions)
 
     await t.flush()
   })
@@ -214,7 +322,7 @@ describe('[GOES Security FE] auth.store', () => {
 
 ## Adapt to your project
 
-- Replace `@/features/auth/stores/auth.store` with the real import.
+- Replace `@/features/auth/stores/auth.store` with the real store import.
 - If the store uses Vuex, replace `useAuthStore()` with the Vuex equivalent and adjust setters.
 - The `PERMISOS` map lives in `@/features/auth/types`. If your project uses a different permissions model (ACL list, single `role` string), adapt the `can()` assertions accordingly.
 - Add tests for every `perfil` × `flag` combination used in your app (admin gets everything, técnico gets a subset, usuario is read-only).
