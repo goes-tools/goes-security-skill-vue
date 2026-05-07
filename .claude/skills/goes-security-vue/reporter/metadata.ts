@@ -27,10 +27,28 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 
 // ─── Temp directory for metadata files ─────────────────────────
-const TEMP_DIR = path.resolve(
-  process.env.SECURITY_REPORTER_TEMP_DIR ||
-    path.join(os.tmpdir(), 'security-html-reporter'),
-);
+//
+// Concurrency: when Jest runs in parallel (--maxWorkers > 1) or when several
+// CI jobs share the same machine, every worker process must scope its
+// metadata to a unique subdirectory; otherwise the reporter would merge
+// unrelated runs.
+//
+// Resolution order:
+//   1. SECURITY_REPORTER_TEMP_DIR  (full override)
+//   2. SECURITY_REPORTER_RUN_ID    (subdir scoped to this run)
+//   3. fallback: $TMPDIR/security-html-reporter
+function resolveTempDir(): string {
+  if (process.env.SECURITY_REPORTER_TEMP_DIR) {
+    return path.resolve(process.env.SECURITY_REPORTER_TEMP_DIR);
+  }
+  const runId = process.env.SECURITY_REPORTER_RUN_ID;
+  if (runId) {
+    return path.resolve(path.join(os.tmpdir(), 'security-html-reporter', runId));
+  }
+  return path.resolve(path.join(os.tmpdir(), 'security-html-reporter'));
+}
+
+const TEMP_DIR = resolveTempDir();
 
 // Ensure temp directory exists
 if (!fs.existsSync(TEMP_DIR)) {
@@ -55,6 +73,13 @@ export interface TestMetadata {
   parameters: Array<{ name: string; value: string }>;
   steps: string[];
   evidences: Array<{ name: string; data: unknown }>;
+  /**
+   * If set, the reporter overrides the test status to "skipped" and renders a
+   * Not Applicable badge with this reason. Use it when a checklist item does
+   * not apply to the project under test (e.g. R57-R60 file upload rules on a
+   * backend that does not accept uploads).
+   */
+  naReason?: string;
 }
 
 // ─── Reporter Class ─────────────────────────────────────────────
@@ -152,6 +177,26 @@ class SecurityTestReporter {
   }
 
   /**
+   * Mark this test as Not Applicable. The reporter overrides the test status
+   * to "skipped" and renders a Not Applicable badge with the given reason.
+   *
+   * Use it.skip() also works but loses metadata. notApplicable() keeps the
+   * test body running (so metadata is captured) and reports as skipped.
+   *
+   * Example:
+   *   it('R57-R60 — File upload rules', async () => {
+   *     const t = report();
+   *     t.epic('Archivos').feature('File Upload Security');
+   *     t.notApplicable('Backend does not accept uploads (no multer, no FileInterceptor)');
+   *     await t.flush();
+   *   });
+   */
+  notApplicable(reason: string): this {
+    this.meta.naReason = reason;
+    return this;
+  }
+
+  /**
    * Flush metadata to a temp JSON file.
    * The custom reporter reads these files in onRunComplete.
    */
@@ -194,17 +239,24 @@ export class AllureCompat {
   parentSuite(name: string) { this.reporter.parentSuite(name); }
   link(url: string, name?: string) { this.reporter.link(url, name); }
   descriptionHtml(html: string) { this.reporter.descriptionHtml(html); }
+  // allure-js-commons exposes description() (markdown). We keep both names so
+  // patterns migrated from the legacy Allure API still type-check.
+  description(text: string) { this.reporter.descriptionHtml(text); }
   parameter(name: string, value: unknown) { this.reporter.parameter(name, value); }
+  notApplicable(reason: string) { this.reporter.notApplicable(reason); }
 
-  step(name: string, fn?: () => any): any {
+  step<T = unknown>(name: string, fn?: () => T): T extends void ? this : T {
     return this.reporter.step(name, fn);
   }
 
-  async attachment(name: string, data: string, _options?: any) {
-    try {
-      const parsed = JSON.parse(data);
-      this.reporter.evidence(name, parsed);
-    } catch {
+  async attachment(name: string, data: unknown, _options?: any) {
+    if (typeof data === 'string') {
+      try {
+        this.reporter.evidence(name, JSON.parse(data));
+      } catch {
+        this.reporter.evidence(name, data);
+      }
+    } else {
       this.reporter.evidence(name, data);
     }
   }
@@ -212,6 +264,23 @@ export class AllureCompat {
   async flush() {
     await this.reporter.flush();
   }
+}
+
+/**
+ * Convenience helper used by legacy `attach('name', data)` calls in the test
+ * patterns. Wires through to AllureCompat#attachment so callers do not need to
+ * stringify their evidence manually.
+ *
+ * Usage in a spec:
+ *   import { AllureCompat, attachFor } from '@security-reporter/metadata';
+ *   const allure = new AllureCompat();
+ *   const attach = attachFor(allure);
+ *   await attach('payload (input)', { foo: 'bar' });
+ */
+export function attachFor(allure: AllureCompat) {
+  return async (name: string, data: unknown) => {
+    await allure.attachment(name, data);
+  };
 }
 
 /**
