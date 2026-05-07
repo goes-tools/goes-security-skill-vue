@@ -177,6 +177,20 @@ class SecurityHtmlReporter {
       `   ${summary.total} tests | ${summary.passed} passed | ${summary.failed} failed | ${reportData.meta.duration}ms`,
     );
 
+    if (summary.failed > 0) {
+      console.log(`\n   Failed tests:`);
+      for (const t of mergedTests) {
+        if (t.status === 'failed') {
+          const loc = t.relativePath ? ` (${t.relativePath})` : '';
+          const firstLine = (t.errors[0] || '')
+            .replace(/\x1b\[[0-9;]*m/g, '').replace(/\[[0-9;]*m/g, '')
+            .split('\n')[0].trim();
+          console.log(`   - ${t.fullName}${loc}`);
+          if (firstLine) console.log(`     ${firstLine}`);
+        }
+      }
+    }
+
     // Cleanup temp files
     if (fs.existsSync(tempDir)) {
       try {
@@ -1036,17 +1050,161 @@ class SecurityHtmlReporter {
     }
 
     .error-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .error-item {
       background: #16213e;
-      padding: 12px;
-      border-radius: 4px;
+      border-radius: 6px;
       border: 1px solid #2a3a4a;
-      border-left: 3px solid #ef4444;
+      overflow: hidden;
+    }
+
+    .error-file-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #2a3a4a;
+      font-size: 12px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    }
+
+    .error-file-icon {
+      flex-shrink: 0;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #ef4444;
+    }
+
+    .error-file-path {
+      color: #93c5fd;
+      word-break: break-all;
+    }
+
+    .error-file-line {
+      color: #fbbf24;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    .error-body {
+      padding: 12px;
+    }
+
+    .error-message {
       font-size: 12px;
       font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
       color: #fca5a5;
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
+    }
+
+    .error-expected-received {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .error-expected, .error-received {
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      line-height: 1.5;
+    }
+
+    .error-expected {
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      color: #86efac;
+    }
+
+    .error-received {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
+    .error-er-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+      opacity: 0.7;
+    }
+
+    .error-steps-context {
+      margin-top: 10px;
+      padding: 8px 12px;
+      background: rgba(234, 179, 8, 0.05);
+      border: 1px solid rgba(234, 179, 8, 0.15);
+      border-radius: 4px;
+    }
+
+    .error-steps-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: #fbbf24;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .error-steps-list {
+      font-size: 12px;
+      color: #fde68a;
+      line-height: 1.6;
+    }
+
+    .error-raw-toggle {
+      margin-top: 8px;
+      padding: 3px 8px;
+      background: transparent;
+      border: 1px solid #2a3a4a;
+      border-radius: 3px;
+      color: #4b5563;
+      font-size: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .error-raw-toggle:hover {
+      background: #1a1a2e;
+      color: #6b7280;
+    }
+
+    .error-raw-stack {
+      display: none;
+      margin-top: 6px;
+      padding: 8px 10px;
+      background: #0d1117;
+      border-radius: 4px;
+      font-size: 10px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      color: #6b7280;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .error-raw-stack.open {
+      display: block;
+    }
+
+    .test-file-path {
+      font-size: 11px;
+      color: #6b7280;
+      margin-top: 2px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     }
 
     .empty-state {
@@ -1853,8 +2011,12 @@ class SecurityHtmlReporter {
             ? \`<span class="badge badge-severity badge-\${test.severity}">\${test.severity.toUpperCase()}</span>\`
             : '';
 
+        const fileHint = test.status === 'failed' && test.relativePath
+          ? \`<div class="test-file-path">\${escapeHtml(test.relativePath)}</div>\`
+          : '';
+
         row.innerHTML = \`
-          <div class="test-name" title="\${escapeHtml(test.fullName)}">\${escapeHtml(test.name)}</div>
+          <div class="test-name" title="\${escapeHtml(test.fullName)}">\${escapeHtml(test.name)}\${fileHint}</div>
           <div class="test-severity">\${severityCell}</div>
           <div class="test-severity">\${tagsHtml}</div>
           <div class="test-status \${statusClass}">\${statusIcon}</div>
@@ -2041,8 +2203,53 @@ class SecurityHtmlReporter {
       if (test.errors.length > 0) {
         content += \`
           <div class="modal-section">
-            <div class="modal-section-title">Errors</div>
-            <div class="error-list">\${test.errors.map((err) => escapeHtml(err)).join('\\n\\n')}</div>
+            <div class="modal-section-title">Errors (\${test.errors.length})</div>
+            <div class="error-list">
+              \${test.errors.map((err, idx) => {
+                const parsed = parseError(err, test.relativePath);
+                const errId = test.id + '-err-' + idx;
+                let html = '<div class="error-item">';
+
+                // File location bar
+                if (parsed.file) {
+                  html += \`<div class="error-file-bar">
+                    <span class="error-file-icon"></span>
+                    <span class="error-file-path">\${escapeHtml(parsed.file)}</span>
+                    \${parsed.line ? \`<span class="error-file-line">line \${escapeHtml(parsed.line)}</span>\` : ''}
+                  </div>\`;
+                }
+
+                html += '<div class="error-body">';
+
+                // Clean error message
+                html += \`<div class="error-message">\${escapeHtml(parsed.message)}</div>\`;
+
+                // Expected vs Received
+                if (parsed.expected || parsed.received) {
+                  html += '<div class="error-expected-received">';
+                  if (parsed.expected) html += \`<div class="error-expected"><div class="error-er-label">Expected</div>\${escapeHtml(parsed.expected)}</div>\`;
+                  if (parsed.received) html += \`<div class="error-received"><div class="error-er-label">Received</div>\${escapeHtml(parsed.received)}</div>\`;
+                  html += '</div>';
+                }
+
+                // Steps context
+                if (test.steps && test.steps.length > 0) {
+                  html += \`<div class="error-steps-context">
+                    <div class="error-steps-title">What was verified</div>
+                    <div class="error-steps-list">\${test.steps.map(s => '• ' + escapeHtml(s)).join('<br>')}</div>
+                  </div>\`;
+                }
+
+                // Raw stack — tiny toggle at the bottom
+                if (parsed.stack) {
+                  html += \`<button class="error-raw-toggle" onclick="toggleRawStack('\${errId}')">Show raw output</button>
+                    <div class="error-raw-stack" id="raw-\${errId}">\${escapeHtml(parsed.stack)}</div>\`;
+                }
+
+                html += '</div></div>';
+                return html;
+              }).join('')}
+            </div>
           </div>
         \`;
       }
@@ -2168,6 +2375,64 @@ class SecurityHtmlReporter {
         } catch (_) {
           fail();
         }
+      }
+    }
+
+    // ── Error parser ─────────────────────────────────────────────
+    // Extracts file, line, expected/received from raw Jest/Vitest error text.
+    function parseError(raw, fallbackFile) {
+      if (!raw) return { message: '', stack: '', file: '', line: '', expected: '', received: '' };
+      // Strip ANSI escape codes
+      const clean = raw.replace(/\[[0-9;]*m/g, '').replace(/\x1b\[[0-9;]*m/g, '');
+
+      let file = '';
+      let line = '';
+      let expected = '';
+      let received = '';
+
+      // Extract file:line — "at Object.<anonymous> (path/file.ts:42:5)"
+      const atMatch = clean.match(/at\s+(?:Object\.<anonymous>|[\w.]+)\s+\((.+?):(\d+):\d+\)/);
+      if (atMatch) { file = atMatch[1]; line = atMatch[2]; }
+
+      // Also try "● path/file.ts" or "> path/file.ts"
+      if (!file) {
+        const bulletMatch = clean.match(/^\s*(?:●|>)\s+(.+\.(?:ts|js|tsx|jsx|vue))(?::(\d+))?/m);
+        if (bulletMatch) { file = bulletMatch[1]; if (bulletMatch[2]) line = bulletMatch[2]; }
+      }
+
+      // Extract Expected / Received
+      const expMatch = clean.match(/Expected[:\s]+(.+)/);
+      const recMatch = clean.match(/Received[:\s]+(.+)/);
+      if (expMatch) expected = expMatch[1].trim();
+      if (recMatch) received = recMatch[1].trim();
+
+      // Split message from stack trace
+      let message = '';
+      let stack = '';
+      const stackIdx = clean.indexOf('\n    at ');
+      if (stackIdx > -1) {
+        message = clean.substring(0, stackIdx).trim();
+        stack = clean.substring(stackIdx).trim();
+      } else {
+        message = clean.trim();
+      }
+
+      // Make absolute paths relative
+      if (file && file.startsWith('/')) {
+        const parts = file.split('/');
+        const srcIdx = parts.findIndex(p => p === 'tests' || p === 'test' || p === 'src');
+        if (srcIdx > -1) file = parts.slice(srcIdx).join('/');
+      }
+
+      return { message, stack, file: file || fallbackFile || '', line, expected, received };
+    }
+
+    function toggleRawStack(errId) {
+      const el = document.getElementById('raw-' + errId);
+      const btn = el?.previousElementSibling;
+      if (el) {
+        el.classList.toggle('open');
+        if (btn) btn.textContent = el.classList.contains('open') ? 'Hide raw output' : 'Show raw output';
       }
     }
 
