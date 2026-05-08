@@ -71,7 +71,7 @@ Reporter:
 - reportTitle: "Security Test Report — GOES [Sistema]"
 
 Al final, npm run test:security y resumen con cobertura, hallazgos rojos,
-items N/A con su justificación, y los 4 buckets del Excel.
+items N/A con su justificación, y los 4 buckets del Excel, en español.
 ```
 
 **Use when**: you want a clean compliance report, a third-party audit, or a baseline before the team starts remediation. Findings stay visible in the HTML and Excel.
