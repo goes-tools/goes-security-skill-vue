@@ -2487,7 +2487,7 @@ class SecurityHtmlReporter {
     function parseError(raw, fallbackFile) {
       if (!raw) return { message: '', stack: '', file: '', line: '', expected: '', received: '', firstLine: '' };
       // Strip ANSI escape codes
-      const clean = raw.replace(/\x1b\[[0-9;]*m/g, '').replace(/\[[0-9;]*m/g, '');
+      const clean = raw.replace(/\\x1b\\[[0-9;]*m/g, '').replace(/\\[[0-9;]*m/g, '');
 
       let file = '';
       let line = '';
@@ -2495,31 +2495,31 @@ class SecurityHtmlReporter {
       let received = '';
 
       // Extract file:line — "at Object.<anonymous> (path/file.ts:42:5)"
-      const atMatch = clean.match(/at\s+(?:Object\.<anonymous>|[\w.]+)\s+\((.+?):(\d+):\d+\)/);
+      const atMatch = clean.match(/at\\s+(?:Object\\.\\<anonymous\\>|[\\w.]+)\\s+\\((.+?):(\\d+):\\d+\\)/);
       if (atMatch) { file = atMatch[1]; line = atMatch[2]; }
 
       // Also try "● path/file.ts" or "> path/file.ts"
       if (!file) {
-        const bulletMatch = clean.match(/^\s*(?:●|>)\s+(.+\.(?:ts|js|tsx|jsx|vue))(?::(\d+))?/m);
+        const bulletMatch = clean.match(/^\\s*(?:●|>)\\s+(.+\\.(?:ts|js|tsx|jsx|vue))(?::(\\d+))?/m);
         if (bulletMatch) { file = bulletMatch[1]; if (bulletMatch[2]) line = bulletMatch[2]; }
       }
 
       // Try bare path:line:col at the end of a line (Vitest style)
       if (!file) {
-        const bareMatch = clean.match(/(\S+\.(?:ts|js|tsx|jsx|vue)):(\d+):\d+/);
+        const bareMatch = clean.match(/(\\S+\\.(?:ts|js|tsx|jsx|vue)):(\\d+):\\d+/);
         if (bareMatch) { file = bareMatch[1]; line = bareMatch[2]; }
       }
 
       // Extract Expected / Received — support multiword labels
-      const expMatch = clean.match(/Expected(?:\s+\w+)*[:\s]+(.+)/);
-      const recMatch = clean.match(/Received(?:\s+\w+)*[:\s]+(.+)/);
+      const expMatch = clean.match(/Expected(?:\\s+\\w+)*[:\\s]+(.+)/);
+      const recMatch = clean.match(/Received(?:\\s+\\w+)*[:\\s]+(.+)/);
       if (expMatch) expected = expMatch[1].trim();
       if (recMatch) received = recMatch[1].trim();
 
       // Split message from stack trace
       let message = '';
       let stack = '';
-      const stackIdx = clean.indexOf('\n    at ');
+      const stackIdx = clean.indexOf('\\n    at ');
       if (stackIdx > -1) {
         message = clean.substring(0, stackIdx).trim();
         stack = clean.substring(stackIdx).trim();
@@ -2529,11 +2529,11 @@ class SecurityHtmlReporter {
 
       // Extract a clean one-liner summary (first meaningful line)
       let firstLine = '';
-      const msgLines = message.split('\n');
+      const msgLines = message.split('\\n');
       for (const l of msgLines) {
-        const trimmed = l.replace(/^\s*[●>]\s*/, '').trim();
-        if (trimmed && trimmed.length > 5 && !trimmed.match(/^\s*at\s/)) {
-          if (!trimmed.match(/^[\w/\\\.\-]+\.(ts|js|tsx|jsx|vue)(:\d+)?$/)) {
+        const trimmed = l.replace(/^\\s*[●>]\\s*/, '').trim();
+        if (trimmed && trimmed.length > 5 && !trimmed.match(/^\\s*at\\s/)) {
+          if (!trimmed.match(/^[\\w/\\\\\\.\\-]+\\.(ts|js|tsx|jsx|vue)(:\\d+)?$/)) {
             firstLine = trimmed.length > 120 ? trimmed.substring(0, 117) + '...' : trimmed;
             break;
           }
