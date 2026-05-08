@@ -1207,6 +1207,96 @@ class SecurityHtmlReporter {
       font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
     }
 
+    /* ── Source file context bar (modal) ────────────────────── */
+    .modal-source-file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      background: #0f1729;
+      border-bottom: 1px solid #2a3a4a;
+      font-size: 12px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    }
+
+    .modal-source-file .source-icon {
+      flex-shrink: 0;
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #93c5fd;
+    }
+
+    .modal-source-file .source-path {
+      color: #93c5fd;
+      word-break: break-all;
+    }
+
+    .modal-source-file .source-label {
+      color: #4b5563;
+      flex-shrink: 0;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Error number badge ─────────────────────────────────── */
+    .error-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+
+    .error-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #1a1a2e;
+      border-bottom: 1px solid #2a3a4a;
+    }
+
+    .error-header-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+      flex: 1;
+    }
+
+    .error-header-file {
+      font-size: 12px;
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      color: #93c5fd;
+      word-break: break-all;
+    }
+
+    .error-header-line {
+      font-size: 11px;
+      color: #fbbf24;
+      flex-shrink: 0;
+    }
+
+    .error-summary {
+      font-size: 12px;
+      color: #d1d5db;
+      line-height: 1.4;
+      padding: 10px 12px;
+      background: rgba(239, 68, 68, 0.05);
+      border-bottom: 1px solid #2a3a4a;
+      word-break: break-word;
+    }
+
     .empty-state {
       display: flex;
       flex-direction: column;
@@ -2011,7 +2101,7 @@ class SecurityHtmlReporter {
             ? \`<span class="badge badge-severity badge-\${test.severity}">\${test.severity.toUpperCase()}</span>\`
             : '';
 
-        const fileHint = test.status === 'failed' && test.relativePath
+        const fileHint = test.relativePath
           ? \`<div class="test-file-path">\${escapeHtml(test.relativePath)}</div>\`
           : '';
 
@@ -2083,6 +2173,14 @@ class SecurityHtmlReporter {
           ? \`<span class="badge badge-severity badge-\${test.severity}">\${test.severity.toUpperCase()}</span>\`
           : '';
 
+      const sourceFileBar = test.relativePath
+        ? \`<div class="modal-source-file">
+            <span class="source-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg></span>
+            <span class="source-label">Spec</span>
+            <span class="source-path">\${escapeHtml(test.relativePath)}</span>
+          </div>\`
+        : '';
+
       let content = \`
         <div class="modal-header">
           <div>
@@ -2090,6 +2188,7 @@ class SecurityHtmlReporter {
           </div>
           <button class="modal-close" onclick="closeModal()">✕</button>
         </div>
+        \${sourceFileBar}
         <div class="modal-content">
           <div class="modal-section">
             <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
@@ -2210,18 +2309,23 @@ class SecurityHtmlReporter {
                 const errId = test.id + '-err-' + idx;
                 let html = '<div class="error-item">';
 
-                // File location bar
+                // ── Error header with number badge + file location ──
+                html += '<div class="error-header">';
+                html += \`<span class="error-number">\${idx + 1}</span>\`;
+                html += '<div class="error-header-info">';
                 if (parsed.file) {
-                  html += \`<div class="error-file-bar">
-                    <span class="error-file-icon"></span>
-                    <span class="error-file-path">\${escapeHtml(parsed.file)}</span>
-                    \${parsed.line ? \`<span class="error-file-line">line \${escapeHtml(parsed.line)}</span>\` : ''}
-                  </div>\`;
+                  html += \`<span class="error-header-file">\${escapeHtml(parsed.file)}\`;
+                  if (parsed.line) html += \`<span class="error-header-line"> : \${escapeHtml(parsed.line)}</span>\`;
+                  html += '</span>';
                 }
+                // One-liner summary extracted from the first meaningful line
+                if (parsed.firstLine) {
+                  html += \`<span style="font-size:11px;color:#9ca3af;">\${escapeHtml(parsed.firstLine)}</span>\`;
+                }
+                html += '</div></div>';
 
+                // ── Clean error message body ──
                 html += '<div class="error-body">';
-
-                // Clean error message
                 html += \`<div class="error-message">\${escapeHtml(parsed.message)}</div>\`;
 
                 // Expected vs Received
@@ -2232,7 +2336,7 @@ class SecurityHtmlReporter {
                   html += '</div>';
                 }
 
-                // Steps context
+                // Steps context — what was verified
                 if (test.steps && test.steps.length > 0) {
                   html += \`<div class="error-steps-context">
                     <div class="error-steps-title">What was verified</div>
@@ -2240,7 +2344,7 @@ class SecurityHtmlReporter {
                   </div>\`;
                 }
 
-                // Raw stack — tiny toggle at the bottom
+                // Raw stack — toggle at the bottom
                 if (parsed.stack) {
                   html += \`<button class="error-raw-toggle" onclick="toggleRawStack('\${errId}')">Show raw output</button>
                     <div class="error-raw-stack" id="raw-\${errId}">\${escapeHtml(parsed.stack)}</div>\`;
@@ -2381,9 +2485,9 @@ class SecurityHtmlReporter {
     // ── Error parser ─────────────────────────────────────────────
     // Extracts file, line, expected/received from raw Jest/Vitest error text.
     function parseError(raw, fallbackFile) {
-      if (!raw) return { message: '', stack: '', file: '', line: '', expected: '', received: '' };
+      if (!raw) return { message: '', stack: '', file: '', line: '', expected: '', received: '', firstLine: '' };
       // Strip ANSI escape codes
-      const clean = raw.replace(/\[[0-9;]*m/g, '').replace(/\x1b\[[0-9;]*m/g, '');
+      const clean = raw.replace(/\x1b\[[0-9;]*m/g, '').replace(/\[[0-9;]*m/g, '');
 
       let file = '';
       let line = '';
@@ -2400,9 +2504,15 @@ class SecurityHtmlReporter {
         if (bulletMatch) { file = bulletMatch[1]; if (bulletMatch[2]) line = bulletMatch[2]; }
       }
 
-      // Extract Expected / Received
-      const expMatch = clean.match(/Expected[:\s]+(.+)/);
-      const recMatch = clean.match(/Received[:\s]+(.+)/);
+      // Try bare path:line:col at the end of a line (Vitest style)
+      if (!file) {
+        const bareMatch = clean.match(/(\S+\.(?:ts|js|tsx|jsx|vue)):(\d+):\d+/);
+        if (bareMatch) { file = bareMatch[1]; line = bareMatch[2]; }
+      }
+
+      // Extract Expected / Received — support multiword labels
+      const expMatch = clean.match(/Expected(?:\s+\w+)*[:\s]+(.+)/);
+      const recMatch = clean.match(/Received(?:\s+\w+)*[:\s]+(.+)/);
       if (expMatch) expected = expMatch[1].trim();
       if (recMatch) received = recMatch[1].trim();
 
@@ -2417,6 +2527,19 @@ class SecurityHtmlReporter {
         message = clean.trim();
       }
 
+      // Extract a clean one-liner summary (first meaningful line)
+      let firstLine = '';
+      const msgLines = message.split('\n');
+      for (const l of msgLines) {
+        const trimmed = l.replace(/^\s*[●>]\s*/, '').trim();
+        if (trimmed && trimmed.length > 5 && !trimmed.match(/^\s*at\s/)) {
+          if (!trimmed.match(/^[\w/\\\.\-]+\.(ts|js|tsx|jsx|vue)(:\d+)?$/)) {
+            firstLine = trimmed.length > 120 ? trimmed.substring(0, 117) + '...' : trimmed;
+            break;
+          }
+        }
+      }
+
       // Make absolute paths relative
       if (file && file.startsWith('/')) {
         const parts = file.split('/');
@@ -2424,7 +2547,7 @@ class SecurityHtmlReporter {
         if (srcIdx > -1) file = parts.slice(srcIdx).join('/');
       }
 
-      return { message, stack, file: file || fallbackFile || '', line, expected, received };
+      return { message, stack, file: file || fallbackFile || '', line, expected, received, firstLine };
     }
 
     function toggleRawStack(errId) {
