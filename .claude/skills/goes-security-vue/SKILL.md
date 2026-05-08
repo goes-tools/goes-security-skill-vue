@@ -517,7 +517,7 @@ Ver `references/test-patterns/` para el codigo completo de cada pattern.
 2. **Analizar el codigo real** antes de escribir tests. Leer el archivo `.ts` / `.vue` y entender los metodos, stores, guards y logica.
 3. **Si un item del checklist no aplica** al proyecto actual, generar entry en `not-applicable.security-html.spec.ts` con motivo y vector. Nunca omitir silenciosamente.
 4. **Priorizar tests de seguridad** sobre tests funcionales.
-5. **Los comentarios del codigo van en ingles** (ASCII puro). Los `descriptionHtml` del reporter pueden ir en ingles o espanol segun la preferencia del equipo, pero sean consistentes.
+5. **Los comentarios del codigo van en ingles** (ASCII puro). Los `descriptionHtml` del reporter deben ir en **espanol** para que el reporte HTML generado sea consistente con la interfaz del reporter (que esta toda en espanol). Las etiquetas de `epic`, `feature`, `story` tambien deben ir en espanol. Los nombres de test (`it('...')`) y los `test.describe(...)` se mantienen en ingles por convencion tecnica.
 6. **Respetar el `tsconfig.json`** del proyecto.
 7. **Cada test debe ser independiente** — `beforeEach(() => setActivePinia(createPinia()))`.
 8. **Usar `vi.mock`** para side-effects transversales (session-scheduler, refresh-coordinator, activity-tracker) en specs que no los testean directamente — sino la store dispara timers reales que ensucian stderr.
